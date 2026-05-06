@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-04-27T17:27:16.173Z",
-  "version": "1.0.44",
+  "generatedAt": "2026-05-06T05:52:52.132Z",
+  "version": "1.0.45",
   "resources": {
     "ophelStyles": {
-      "fileName": "ophel.user.245ced279828.css",
-      "relativePath": "userscript-assets/ophel.user.245ced279828.css"
+      "fileName": "ophel.user.5e32f7db2a1a.css",
+      "relativePath": "userscript-assets/ophel.user.5e32f7db2a1a.css"
     },
     "ophelIcon": {
       "fileName": "ophel-icon.193ed41c2441.png",
@@ -35,44 +35,44 @@
       "relativePath": "userscript-assets/ophel-watermark-bg-96.3e26f2233a12.png"
     },
     "ophelLocaleZhCN": {
-      "fileName": "ophel.locale.zh-CN.3738e69246dc.json",
-      "relativePath": "userscript-assets/ophel.locale.zh-CN.3738e69246dc.json"
+      "fileName": "ophel.locale.zh-CN.6c08dc66e52c.json",
+      "relativePath": "userscript-assets/ophel.locale.zh-CN.6c08dc66e52c.json"
     },
     "ophelLocaleZhTW": {
-      "fileName": "ophel.locale.zh-TW.388aead01b77.json",
-      "relativePath": "userscript-assets/ophel.locale.zh-TW.388aead01b77.json"
+      "fileName": "ophel.locale.zh-TW.3b6776cb7ec6.json",
+      "relativePath": "userscript-assets/ophel.locale.zh-TW.3b6776cb7ec6.json"
     },
     "ophelLocaleEn": {
-      "fileName": "ophel.locale.en.65a89aa4f35e.json",
-      "relativePath": "userscript-assets/ophel.locale.en.65a89aa4f35e.json"
+      "fileName": "ophel.locale.en.9d8ffe8a23b2.json",
+      "relativePath": "userscript-assets/ophel.locale.en.9d8ffe8a23b2.json"
     },
     "ophelLocaleJa": {
-      "fileName": "ophel.locale.ja.da386f9ecef7.json",
-      "relativePath": "userscript-assets/ophel.locale.ja.da386f9ecef7.json"
+      "fileName": "ophel.locale.ja.b8a582e30d34.json",
+      "relativePath": "userscript-assets/ophel.locale.ja.b8a582e30d34.json"
     },
     "ophelLocaleKo": {
-      "fileName": "ophel.locale.ko.4f30772f8e80.json",
-      "relativePath": "userscript-assets/ophel.locale.ko.4f30772f8e80.json"
+      "fileName": "ophel.locale.ko.1425822f5e07.json",
+      "relativePath": "userscript-assets/ophel.locale.ko.1425822f5e07.json"
     },
     "ophelLocaleFr": {
-      "fileName": "ophel.locale.fr.13f22558466f.json",
-      "relativePath": "userscript-assets/ophel.locale.fr.13f22558466f.json"
+      "fileName": "ophel.locale.fr.72e5e25ed37a.json",
+      "relativePath": "userscript-assets/ophel.locale.fr.72e5e25ed37a.json"
     },
     "ophelLocaleDe": {
-      "fileName": "ophel.locale.de.cb113ffea46a.json",
-      "relativePath": "userscript-assets/ophel.locale.de.cb113ffea46a.json"
+      "fileName": "ophel.locale.de.38038a0994af.json",
+      "relativePath": "userscript-assets/ophel.locale.de.38038a0994af.json"
     },
     "ophelLocaleRu": {
-      "fileName": "ophel.locale.ru.ff2de8e43883.json",
-      "relativePath": "userscript-assets/ophel.locale.ru.ff2de8e43883.json"
+      "fileName": "ophel.locale.ru.f65d6daa5ebb.json",
+      "relativePath": "userscript-assets/ophel.locale.ru.f65d6daa5ebb.json"
     },
     "ophelLocaleEs": {
-      "fileName": "ophel.locale.es.17e4b3de0bab.json",
-      "relativePath": "userscript-assets/ophel.locale.es.17e4b3de0bab.json"
+      "fileName": "ophel.locale.es.817d9e8d375d.json",
+      "relativePath": "userscript-assets/ophel.locale.es.817d9e8d375d.json"
     },
     "ophelLocalePt": {
-      "fileName": "ophel.locale.pt.fe290b9ff452.json",
-      "relativePath": "userscript-assets/ophel.locale.pt.fe290b9ff452.json"
+      "fileName": "ophel.locale.pt.30f5c8b2f31a.json",
+      "relativePath": "userscript-assets/ophel.locale.pt.30f5c8b2f31a.json"
     }
   }
 }
