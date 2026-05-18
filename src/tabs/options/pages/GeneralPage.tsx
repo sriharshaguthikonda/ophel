@@ -496,6 +496,31 @@ const GeneralPage: React.FC<GeneralPageProps> = ({ siteId: _siteId, initialTab }
               }
             />
             <SettingRow
+              label={t("quickButtonsProximityRadiusLabel")}
+              description={t("quickButtonsProximityRadiusDesc")}
+              settingId="quick-buttons-proximity-radius">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <input
+                  type="range"
+                  min="0"
+                  max="300"
+                  step="10"
+                  value={settings.quickButtons?.proximityRadius ?? 150}
+                  onChange={(e) =>
+                    updateNestedSetting(
+                      "quickButtons",
+                      "proximityRadius",
+                      parseInt(e.target.value, 10),
+                    )
+                  }
+                  style={{ width: "120px" }}
+                />
+                <span style={{ fontSize: "12px", minWidth: "36px" }}>
+                  {settings.quickButtons?.proximityRadius ?? 150}px
+                </span>
+              </div>
+            </SettingRow>
+            <SettingRow
               label={t("quickButtonsOpacityLabel") || "快捷按钮不透明度"}
               description={t("quickButtonsOpacityDesc") || "调整快捷按钮组整体不透明度"}
               settingId="quick-buttons-opacity">
