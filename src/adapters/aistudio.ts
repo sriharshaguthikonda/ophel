@@ -1728,31 +1728,34 @@ export class AIStudioAdapter extends SiteAdapter {
     // 必须精确定位到 ms-prompt-chunk.text-chunk，避免抓取按钮和标签文本
     const contentChunk = this.findUserContentChunk(element)
     if (contentChunk) {
-      extractedText = this.extractTextWithLineBreaks(contentChunk).trim()
+      // 即使找到 chunk，也可能是 ms-prompt-chunk 包了文字 + image-chunk 的混合 turn——
+      // 直接 extractTextWithLineBreaks 会把 image-chunk 内的 "download" / "fullscreen"
+      // 按钮文字一起算进来污染大纲。统一用 extractCleanTextFromChunk 剥装饰元素 +
+      // 附件 chunk，只保留用户输入的真实文字。
+      extractedText = this.extractCleanTextFromChunk(contentChunk)
     } else {
-      // 回退：尝试从 .turn-content 中排除 .author-label
+      // 没有 ms-text-chunk —— 通常是纯附件（图片/文件）turn 或挂载未完成。
+      // 同样剥所有装饰 + 附件 chunk，避免按钮文字污染大纲（实测显示成
+      // "downloadfullscreen"）。注意：**不**在这里输出 `[Image: alt]` 占位——
+      // 用户要求大纲只显示文字内容，与 AI Studio 原生时间线保持一致；纯附件
+      // turn 让后面的 sidebar fallback 接管文字摘要（或者干脆留空）。
       const turnContent = element.querySelector(".turn-content")
       if (turnContent) {
-        // AI Studio 的虚拟滚动可能会移除 .turn-content 的内容但保留容器
-        // 如果这里获取为空，不代表真的为空，可能是被虚拟化了
-        const authorLabel = turnContent.querySelector(".author-label")
-        if (authorLabel) {
-          // 克隆节点并移除标签
-          const clone = turnContent.cloneNode(true) as Element
-          const labelInClone = clone.querySelector(".author-label")
-          labelInClone?.remove()
-          extractedText = clone.textContent?.trim() || ""
-        } else {
-          extractedText = turnContent.textContent?.trim() || ""
-        }
+        const clone = turnContent.cloneNode(true) as Element
+        clone
+          .querySelectorAll(
+            '.author-label, .actions-container, button, [role="button"], svg, [aria-hidden="true"], ms-image-chunk, ms-file-chunk',
+          )
+          .forEach((node) => node.remove())
+        extractedText = (clone.textContent || "").trim()
       } else {
         extractedText = this.extractTextWithLineBreaks(element)
       }
     }
 
     // --- Side-Channel Hydration (Using Scrollbar) ---
-    // 如果 DOM 提取文本失败（懒加载/Shadow DOM/渲染延迟），尝试从侧边栏获取
-    // 侧边栏按钮通常包含 aria-control="turn-ID" 和 aria-label="Full Text"
+    // 如果 DOM 提取文本失败（懒加载/Shadow DOM/渲染延迟、或纯附件 turn），
+    // 尝试从侧边栏获取 AI Studio 自己生成的摘要文本——保持大纲与原生时间线一致。
     if (!extractedText && turnId) {
       const scrollbarText = this.getTextFromScrollbar(turnId)
       if (scrollbarText) {
@@ -1786,7 +1789,7 @@ export class AIStudioAdapter extends SiteAdapter {
     const source = (contentChunk || element).cloneNode(true) as HTMLElement
     source
       .querySelectorAll(
-        '.author-label, .actions-container, button, [role="button"], svg, [aria-hidden="true"]',
+        '.author-label, .actions-container, button, [role="button"], svg, [aria-hidden="true"], ms-image-chunk, ms-file-chunk',
       )
       .forEach((node) => node.remove())
 
@@ -1887,13 +1890,31 @@ export class AIStudioAdapter extends SiteAdapter {
       const candidate = element.querySelector(selector)
       if (!candidate) continue
 
-      const text = this.extractTextWithLineBreaks(candidate).trim()
+      // 判定 chunk 是否"真有文字内容"前必须排除装饰元素——纯图片附件的
+      // `<ms-prompt-chunk>` 里包着 `<ms-image-chunk>` + 一堆 download/fullscreen
+      // 按钮，原本 textContent 非空就会被误判为"有文字"，结果按钮文字被当成
+      // 用户提问写进大纲（实测大纲显示成 "downloadfullscreen"）。
+      const text = this.extractCleanTextFromChunk(candidate)
       if (text) {
         return candidate
       }
     }
 
     return null
+  }
+
+  /**
+   * 提取 chunk 内的"干净"文字——剥掉装饰元素（按钮 / svg / aria-hidden）和
+   * 附件元素（ms-image-chunk / ms-file-chunk）后的纯用户输入文字。
+   */
+  private extractCleanTextFromChunk(chunk: Element): string {
+    const clone = chunk.cloneNode(true) as Element
+    clone
+      .querySelectorAll(
+        '.actions-container, button, [role="button"], svg, [aria-hidden="true"], ms-image-chunk, ms-file-chunk',
+      )
+      .forEach((n) => n.remove())
+    return this.extractTextWithLineBreaks(clone).trim()
   }
 
   getExportConfig(): ExportConfig | null {
@@ -2638,7 +2659,442 @@ export class AIStudioAdapter extends SiteAdapter {
     return element.hasAttribute(AISTUDIO_EXPORT_ROLE_ATTR)
   }
 
+  /**
+   * 收集导出快照。
+   *
+   * **AI Studio 的关键事实**（用户在控制台跑诊断脚本拿到的 ground truth）：
+   *   - 长会话里**所有** `ms-chat-turn` 都常驻 DOM（358 turn 全部存在），不外层
+   *     虚拟化；
+   *   - 页面**没有** `<cdk-virtual-scroll-viewport>`，普通浏览器滚动，无 CDK；
+   *   - 真正的虚拟化在 turn 内部——`<div class="virtual-scroll-container">` 内
+   *     有 `<div style="height: Xpx">` 高度占位 + `<div class="turn-content">`
+   *     真实内容；离视口远的 turn 的 `.turn-content` 会被卸载只剩占位（见 demo.html）。
+   *
+   * 既然外层不虚拟化，正确做法就是**按 DOM 顺序遍历所有 ms-chat-turn**——这就是
+   * 天然的对话全集，不需要 sidebar 时间线，也不需要 click 任何按钮触发 CDK。
+   * 每个 turn 内部如果 `.turn-content` 没挂载，`scrollIntoView({block:"center"})`
+   * 让它进视口，等 Angular 内部虚拟化把内容渲染出来再抓。
+   *
+   * 旧的 sidebar-driven / scrollTop step-sweep / lookahead-click 方案都基于错误
+   * 的"外层 CDK 虚拟化"假设，已彻底废弃。
+   */
   private async collectExportMessageSnapshots(
+    scrollContainer: HTMLElement,
+  ): Promise<AIStudioExportMessageSnapshot[]> {
+    const allTurns = Array.from(
+      (scrollContainer.querySelector("ms-chat-session") || document).querySelectorAll(
+        AISTUDIO_TURN_SELECTOR,
+      ),
+    ).filter((turn): turn is HTMLElement => {
+      if (!(turn instanceof HTMLElement)) return false
+      // 排除快照模式自己挂载的占位节点
+      if (turn.closest(`[${AISTUDIO_EXPORT_ROOT_ATTR}]`)) return false
+      return true
+    })
+
+    if (allTurns.length === 0) {
+      // 极端兜底：完全找不到 turn（站点结构变更），退回原来的 step-sweep + repair
+      return this.collectExportMessageSnapshotsByScrollSweep(scrollContainer)
+    }
+
+    return this.collectExportMessageSnapshotsByDomIteration(scrollContainer, allTurns)
+  }
+
+  /**
+   * 按 DOM 顺序遍历每个 ms-chat-turn，必要时 scrollIntoView 让内部 .turn-content
+   * 挂载，然后按状态机配对 user / thought-only / reply 三种 turn：
+   *   - user turn → user snapshot；
+   *   - thought-only model turn → 暂存到 pendingThoughts；
+   *   - reply model turn → 把累积的 thought turn 合并进自己的 assistant snapshot。
+   *
+   * order 直接用 turn 在 DOM 中的位置 index，天然单调、不受滚动影响。
+   */
+  private async collectExportMessageSnapshotsByDomIteration(
+    scrollContainer: HTMLElement,
+    allTurns: HTMLElement[],
+  ): Promise<AIStudioExportMessageSnapshot[]> {
+    const originalScrollTop = scrollContainer.scrollTop
+    const includeThoughts = this.shouldIncludeThoughtsInExport()
+    const collected: AIStudioExportMessageSnapshot[] = []
+    let pendingThoughts: HTMLElement[] = []
+    // 用户附件（图片 / 文件）在 AI Studio 里被渲染成独立的 ms-chat-turn，与紧跟其后的
+    // 文字 turn **本质上是同一次用户提问**。这里像处理 thought-only turn 一样累积
+    // 多个连续的 user turn，等遇到下一个 model turn 时再合并 flush 成一条 user
+    // snapshot——避免一次提问被导出成多条 user 消息。
+    let pendingUserTurns: HTMLElement[] = []
+
+    const flushPendingThoughtsAsAssistant = (orderHint: number): void => {
+      if (pendingThoughts.length === 0 || !includeThoughts) {
+        pendingThoughts = []
+        return
+      }
+      const lastThought = pendingThoughts[pendingThoughts.length - 1]
+      const content = this.buildAssistantContentFromModelTurns(pendingThoughts, includeThoughts)
+      if (content) {
+        collected.push({
+          role: AISTUDIO_EXPORT_ROLE_ASSISTANT,
+          turnKey: `assistant:${lastThought.id || `idx:${orderHint}`}`,
+          order: orderHint,
+          content,
+        })
+      }
+      pendingThoughts = []
+    }
+
+    const flushPendingUserTurnsAsUser = (): void => {
+      if (pendingUserTurns.length === 0) return
+      const parts: string[] = []
+      for (const userTurn of pendingUserTurns) {
+        const userContainer = this.getUserContainerForTurn(userTurn)
+        if (!userContainer) continue
+        const content = this.normalizeExportMessageContent(
+          this.extractUserQueryMarkdown(userContainer),
+        )
+        if (content) parts.push(content)
+      }
+      if (parts.length > 0) {
+        const firstTurn = pendingUserTurns[0]
+        const firstIdx = allTurns.indexOf(firstTurn)
+        collected.push({
+          role: AISTUDIO_EXPORT_ROLE_USER,
+          turnKey: `user:${firstTurn.id || `idx:${firstIdx}`}`,
+          order: firstIdx,
+          content: parts.join("\n\n"),
+        })
+      }
+      pendingUserTurns = []
+    }
+
+    try {
+      for (let i = 0; i < allTurns.length; i += 1) {
+        const turn = allTurns[i]
+
+        // 让 turn 内部内容挂载好——AI Studio 内部虚拟化会在 turn 离开视口后卸载
+        // `.turn-content`，只剩高度占位。scrollIntoView 在普通 DOM scroll 上是可靠的
+        // （这站点没有 CDK Virtual Scroll viewport 干扰）。
+        if (!this.turnHasMountedContent(turn)) {
+          try {
+            turn.scrollIntoView({ block: "center", behavior: "instant" })
+          } catch {
+            turn.scrollIntoView({ block: "center" })
+          }
+          await this.waitForTurnContentMounted(turn, 1800)
+        }
+
+        // 分类
+        const userContainer = this.getUserContainerForTurn(turn)
+        if (userContainer) {
+          // 遇到 user：先把上一轮残留的 thought-only 序列结算掉（罕见，通常 reply
+          // turn 已经吸收过；这里是兜底防止 thought 内容彻底丢失）
+          flushPendingThoughtsAsAssistant(i - 0.5)
+
+          // 不立即输出——可能后面还跟着同次提问的附件 / 文字 turn。先暂存，
+          // 等遇到 model turn 时再合并 flush。
+          pendingUserTurns.push(turn)
+          continue
+        }
+
+        const modelContainer = turn.querySelector(
+          ".chat-turn-container.model",
+        ) as HTMLElement | null
+        if (!modelContainer) continue
+
+        // 遇到 model turn：把累积的连续 user turn 合并 flush 成一条 user snapshot
+        flushPendingUserTurnsAsUser()
+
+        if (this.isThoughtOnlyModelTurn(modelContainer)) {
+          // 暂存——等紧随其后的 reply turn 把它一并合并
+          pendingThoughts.push(turn)
+          continue
+        }
+
+        // reply turn：合并累积的 thought turn + 自己的正文
+        const groupTurns = [...pendingThoughts, turn]
+        pendingThoughts = []
+        const content = this.buildAssistantContentFromModelTurns(groupTurns, includeThoughts)
+        if (content) {
+          collected.push({
+            role: AISTUDIO_EXPORT_ROLE_ASSISTANT,
+            turnKey: `assistant:${turn.id || `idx:${i}`}`,
+            order: i,
+            content,
+          })
+        }
+      }
+
+      // 末尾残留兜底
+      flushPendingUserTurnsAsUser()
+      flushPendingThoughtsAsAssistant(allTurns.length)
+
+      // Retry pass：first pass 走过一遍后，少数 turn 因为内层挂载特别慢（图片大、
+      // 内容长、CPU 抖动等）没能在 1.8s 内抓到——这里把缺失的 user / assistant turn
+      // 单独逐个处理一次，给极宽的 5s timeout + 多轮 scroll 重试。
+      await this.retryMissingTurns(allTurns, collected, includeThoughts)
+    } finally {
+      scrollContainer.scrollTop = originalScrollTop
+      scrollContainer.dispatchEvent(new Event("scroll", { bubbles: true }))
+    }
+
+    return collected.sort((a, b) => a.order - b.order)
+  }
+
+  /**
+   * 把 first pass 漏掉的 turn 单独再处理一次。
+   *
+   * 漏抓的 turn 通常是因为 1.8s 内部挂载没渲染完（图片大、长正文、CPU 高负载）。
+   * 这里用 5s 的宽 timeout + 多次重 scroll，最大化恢复机会。慢一些但保证完整。
+   */
+  private async retryMissingTurns(
+    allTurns: HTMLElement[],
+    collected: AIStudioExportMessageSnapshot[],
+    includeThoughts: boolean,
+  ): Promise<void> {
+    const collectedUserTurnIds = new Set(
+      collected
+        .filter((s) => s.role === AISTUDIO_EXPORT_ROLE_USER)
+        .map((s) => s.turnKey.replace(/^user:/, "")),
+    )
+    const collectedAssistantTurnIds = new Set(
+      collected
+        .filter((s) => s.role === AISTUDIO_EXPORT_ROLE_ASSISTANT)
+        .map((s) => s.turnKey.replace(/^assistant:/, "")),
+    )
+
+    // 找 missing user：DOM 里的 user turn 但 id（包括"被合并到下一个 user 组"的
+    // 第一个 turn id）没出现在 collected 内。
+    const missingUserTurns: HTMLElement[] = []
+    let pendingUserGroupHead: HTMLElement | null = null
+    for (let i = 0; i < allTurns.length; i += 1) {
+      const turn = allTurns[i]
+      const isUser = !!turn.querySelector(".chat-turn-container.user")
+      const isModel = !!turn.querySelector(".chat-turn-container.model")
+
+      if (isUser) {
+        if (!pendingUserGroupHead) pendingUserGroupHead = turn
+        continue
+      }
+
+      if (isModel && pendingUserGroupHead) {
+        const headId = pendingUserGroupHead.id || `idx:${allTurns.indexOf(pendingUserGroupHead)}`
+        if (!collectedUserTurnIds.has(headId)) {
+          missingUserTurns.push(pendingUserGroupHead)
+        }
+        pendingUserGroupHead = null
+      }
+    }
+    if (pendingUserGroupHead) {
+      const headId = pendingUserGroupHead.id || `idx:${allTurns.indexOf(pendingUserGroupHead)}`
+      if (!collectedUserTurnIds.has(headId)) {
+        missingUserTurns.push(pendingUserGroupHead)
+      }
+    }
+
+    // 找 missing assistant：reply model turn（非 thought-only）的 id 不在 collected。
+    const missingAssistantTurns: HTMLElement[] = []
+    for (const turn of allTurns) {
+      const modelContainer = turn.querySelector(".chat-turn-container.model") as HTMLElement | null
+      if (!modelContainer) continue
+      if (this.isThoughtOnlyModelTurn(modelContainer)) continue
+      const id = turn.id || `idx:${allTurns.indexOf(turn)}`
+      if (!collectedAssistantTurnIds.has(id)) {
+        missingAssistantTurns.push(turn)
+      }
+    }
+
+    if (missingUserTurns.length === 0 && missingAssistantTurns.length === 0) return
+
+    // 处理 missing user：重新 reveal + 等 5s + 抓自己 + 下一个连续 user（合并）
+    for (const headTurn of missingUserTurns) {
+      const headIdx = allTurns.indexOf(headTurn)
+      if (headIdx < 0) continue
+
+      // 收集这组连续 user turn
+      const groupTurns: HTMLElement[] = []
+      for (let j = headIdx; j < allTurns.length; j += 1) {
+        const t = allTurns[j]
+        if (!t.querySelector(".chat-turn-container.user")) break
+        groupTurns.push(t)
+      }
+
+      // 对每个 turn 强制 reveal + 等到挂载好
+      const parts: string[] = []
+      for (const t of groupTurns) {
+        try {
+          t.scrollIntoView({ block: "start", behavior: "instant" })
+        } catch {
+          t.scrollIntoView({ block: "start" })
+        }
+        await this.waitForTurnContentMounted(t, 5000)
+        const userContainer = this.getUserContainerForTurn(t)
+        if (!userContainer) continue
+        const content = this.normalizeExportMessageContent(
+          this.extractUserQueryMarkdown(userContainer),
+        )
+        if (content) parts.push(content)
+      }
+
+      if (parts.length > 0) {
+        collected.push({
+          role: AISTUDIO_EXPORT_ROLE_USER,
+          turnKey: `user:${headTurn.id || `idx:${headIdx}`}`,
+          order: headIdx,
+          content: parts.join("\n\n"),
+        })
+      }
+    }
+
+    // 处理 missing assistant：找 reply turn 前面紧邻的 thought-only turn 一起合并
+    for (const replyTurn of missingAssistantTurns) {
+      const replyIdx = allTurns.indexOf(replyTurn)
+      if (replyIdx < 0) continue
+
+      const groupTurns: HTMLElement[] = []
+      // 向前找连续的 thought-only model turn
+      for (let j = replyIdx - 1; j >= 0; j -= 1) {
+        const t = allTurns[j]
+        const mc = t.querySelector(".chat-turn-container.model") as HTMLElement | null
+        if (!mc || !this.isThoughtOnlyModelTurn(mc)) break
+        groupTurns.unshift(t)
+      }
+      groupTurns.push(replyTurn)
+
+      // 强制 reveal + 等
+      for (const t of groupTurns) {
+        try {
+          t.scrollIntoView({ block: "start", behavior: "instant" })
+        } catch {
+          t.scrollIntoView({ block: "start" })
+        }
+        await this.waitForTurnContentMounted(t, 5000)
+      }
+
+      const content = this.buildAssistantContentFromModelTurns(groupTurns, includeThoughts)
+      if (content) {
+        collected.push({
+          role: AISTUDIO_EXPORT_ROLE_ASSISTANT,
+          turnKey: `assistant:${replyTurn.id || `idx:${replyIdx}`}`,
+          order: replyIdx,
+          content,
+        })
+      }
+    }
+  }
+
+  /** turn 内部是否已经渲染出真实内容（不是只剩高度占位）。 */
+  /**
+   * 严格判定 turn 内部是否真的渲染出了可抓取的实际内容。
+   *
+   * AI Studio 的内层虚拟化会先挂载 `<ms-prompt-chunk>` 外壳、再异步填充内部的
+   * `<ms-text-chunk>` / `<ms-thought-chunk>` / `<ms-image-chunk>`。如果只检测
+   * `<ms-prompt-chunk>` 是否存在，会在内部 chunk 还没渲染时就误以为"已挂载"，
+   * 然后 `extractUserQueryMarkdown` 抓到空字符串——这就是用户报告里 9 条 user 提问
+   * 缺失的原因（实测 158 个 user shell 在 DOM、156 个内部是空的）。
+   *
+   * 现在要求 `<ms-prompt-chunk>` 内部至少有一个真实内容 chunk
+   * （text / thought / image / file）才算挂载好。
+   */
+  private turnHasMountedContent(turn: HTMLElement): boolean {
+    const promptChunk = turn.querySelector("ms-prompt-chunk")
+    if (!promptChunk) return false
+    if (
+      promptChunk.querySelector(
+        "ms-text-chunk, ms-thought-chunk, ms-image-chunk, ms-file-chunk, img",
+      )
+    ) {
+      return true
+    }
+    // 罕见 fallback：自定义 chunk 类型——若 prompt-chunk 已有较长 textContent 也算
+    const text = (promptChunk.textContent || "").trim()
+    return text.length > 0
+  }
+
+  /**
+   * scrollIntoView 后轮询等待 turn 内部真正挂载好。
+   *
+   * 给一次"重新滚动"重试机会：第一次 scrollIntoView 后 turn 进入视口可能因 turn
+   * 高度大或 Angular 渲染压力没在 timeout 内挂载好；再 scrollIntoView 一次（block:
+   * "start" 让 turn 顶部贴齐，给后续内容更多渲染时间）并等更久。
+   */
+  private async waitForTurnContentMounted(turn: HTMLElement, timeoutMs: number): Promise<boolean> {
+    const halfDeadline = Date.now() + Math.floor(timeoutMs / 2)
+    while (Date.now() < halfDeadline) {
+      if (this.turnHasMountedContent(turn)) return true
+      await this.sleep(60)
+    }
+
+    // 一半时间过了还没挂载——再 scrollIntoView 一次（block: start，让 turn 在视口
+    // 顶部触发 Angular 重新计算并补渲染），剩下的时间继续轮询。
+    try {
+      turn.scrollIntoView({ block: "start", behavior: "instant" })
+    } catch {
+      turn.scrollIntoView({ block: "start" })
+    }
+
+    const finalDeadline = Date.now() + Math.floor(timeoutMs / 2)
+    while (Date.now() < finalDeadline) {
+      if (this.turnHasMountedContent(turn)) return true
+      await this.sleep(60)
+    }
+    return false
+  }
+
+  /**
+   * 判断 model turn 是否只包含思考过程（无正文）。
+   * 依据：model container 内所有 ms-text-chunk 是否都嵌套在 ms-thought-chunk 内。
+   * 见 demo.html turn 2 (thought-only) vs turn 3 (reply) 的结构对比。
+   */
+  private isThoughtOnlyModelTurn(modelContainer: HTMLElement): boolean {
+    const textChunks = Array.from(modelContainer.querySelectorAll("ms-text-chunk"))
+    if (textChunks.length === 0) return true
+    return textChunks.every((chunk) => chunk.closest(AISTUDIO_THOUGHT_SELECTOR) !== null)
+  }
+
+  /**
+   * 把一组 model turn 合并成单条 assistant 内容。
+   * AI Studio 把"思考过程"和"正式回复"切成两个独立的 ms-chat-turn——前者
+   * thought-only、后者 reply。一个用户提问对应的回复在导出里应当只产出一条 assistant
+   * snapshot：
+   *   - includeThoughts=false：跳过 thought-only turn，只保留 reply 正文；
+   *   - includeThoughts=true：thought 用 blockquote 形式拼到 reply 前面。
+   */
+  private buildAssistantContentFromModelTurns(
+    turns: HTMLElement[],
+    includeThoughts: boolean,
+  ): string {
+    if (turns.length === 0) return ""
+
+    const parts: string[] = []
+    for (const turn of turns) {
+      const modelContainer = turn.querySelector(".chat-turn-container.model") as HTMLElement | null
+      if (!modelContainer) continue
+
+      if (this.isThoughtOnlyModelTurn(modelContainer)) {
+        if (!includeThoughts) continue
+        const thoughtBlocks = this.extractThoughtBlockquotesFromElement(modelContainer)
+        thoughtBlocks.forEach((block) => parts.push(block))
+        continue
+      }
+
+      // reply turn：走 extractAssistantResponseText（它自身按 includeThoughts 过滤
+      // ms-thought-chunk——但 reply turn 没有 thought-chunk，所以等同于纯正文提取）。
+      const fragments = this.getAssistantFragmentsForTurn(turn)
+      const fragmentParts: string[] = []
+      for (const fragment of fragments) {
+        const content = this.normalizeExportMessageContent(
+          this.extractAssistantResponseText(fragment),
+        )
+        if (content) fragmentParts.push(content)
+      }
+      if (fragmentParts.length > 0) {
+        parts.push(fragmentParts.join("\n\n"))
+      }
+    }
+
+    return parts.join("\n\n")
+  }
+
+  /** 时间线驱动方案已废弃后保留的兜底：找不到任何 ms-chat-turn 时退回原 step-sweep。 */
+  private async collectExportMessageSnapshotsByScrollSweep(
     scrollContainer: HTMLElement,
   ): Promise<AIStudioExportMessageSnapshot[]> {
     const positions = this.buildExportSnapshotPositions(scrollContainer)
