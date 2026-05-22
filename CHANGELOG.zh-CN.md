@@ -8,6 +8,10 @@
 
 ## [Unreleased]
 
+---
+
+## [1.0.52] - 2026-05-22
+
 ### ✨ 新功能
 
 - **悬停 Ophel logo 临时预览面板** — 当面板收起到快捷按钮 logo 后，鼠标悬停 logo 会在快捷按钮组旁临时显示面板预览。该预览不会持久化面板展开状态，点击 logo 仍执行原有的面板展开/收起操作。(#524)
@@ -1043,6 +1047,7 @@
 
 ---
 
+[1.0.52]: https://github.com/urzeye/ophel/releases/tag/v1.0.52
 [1.0.51]: https://github.com/urzeye/ophel/releases/tag/v1.0.51
 [1.0.50]: https://github.com/urzeye/ophel/releases/tag/v1.0.50
 [1.0.49]: https://github.com/urzeye/ophel/releases/tag/v1.0.49

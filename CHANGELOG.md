@@ -9,6 +9,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [1.0.52] - 2026-05-22
+
 ### ✨ New Features
 
 - **Hover Ophel logo to temporarily preview the panel** — When the panel is collapsed into the Quick Buttons logo, hovering the logo now opens a temporary panel preview anchored beside the Quick Buttons group. The preview does not persist the panel's expanded state, and clicking the logo still performs the regular panel toggle. (#524)
@@ -1043,6 +1047,7 @@ This is the first official release of Ophel, providing comprehensive enhancement
 
 ---
 
+[1.0.52]: https://github.com/urzeye/ophel/releases/tag/v1.0.52
 [1.0.51]: https://github.com/urzeye/ophel/releases/tag/v1.0.51
 [1.0.50]: https://github.com/urzeye/ophel/releases/tag/v1.0.50
 [1.0.49]: https://github.com/urzeye/ophel/releases/tag/v1.0.49
