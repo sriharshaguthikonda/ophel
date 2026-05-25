@@ -272,6 +272,7 @@ const SETTING_SEARCH_TITLE_KEY_MAP: Record<string, string> = {
   "claude-session-keys": "claudeSessionKeyTitle",
   "content-assistant-mermaid": "assistantMermaidLabel",
   "content-formula-copy": "formulaCopyLabel",
+  "content-formula-copy-format": "formulaCopyFormatLabel",
   "content-formula-delimiter": "formulaDelimiterLabel",
   "content-table-copy": "tableCopyLabel",
   "content-user-query-markdown": "userQueryMarkdownLabel",
