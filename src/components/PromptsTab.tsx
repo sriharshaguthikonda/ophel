@@ -7,7 +7,6 @@ import {
   ClearIcon,
   CopyIcon,
   DeleteIcon,
-  DragIcon,
   EditIcon,
   ExportIcon,
   EyeIcon,
@@ -124,6 +123,7 @@ export const PromptsTab: React.FC<PromptsTabProps> = ({
   // 拖拽状态
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const dragNodeRef = useRef<HTMLDivElement | null>(null)
+  const dropIndicatorRootRef = useRef<ParentNode | null>(null)
 
   // 变量输入弹窗状态
   const [variableDialogState, setVariableDialogState] = useState<{
@@ -845,9 +845,37 @@ export const PromptsTab: React.FC<PromptsTabProps> = ({
   }
 
   // === 拖拽排序 ===
+  const clearPromptDropIndicators = useCallback(() => {
+    const roots = [
+      dropIndicatorRootRef.current,
+      dragNodeRef.current?.getRootNode() as ParentNode | undefined,
+      document,
+    ]
+    const seenRoots = new Set<ParentNode>()
+
+    roots.forEach((root) => {
+      if (!root || seenRoots.has(root)) return
+      seenRoots.add(root)
+      root.querySelectorAll(".drop-above, .drop-below").forEach((el) => {
+        el.classList.remove("drop-above", "drop-below")
+      })
+    })
+
+    dropIndicatorRootRef.current = null
+  }, [])
+
   const handleDragStart = (e: React.DragEvent, id: string, node: HTMLDivElement) => {
+    const target = e.target as HTMLElement
+    if (
+      target.closest('button, input, textarea, select, [role="button"], [data-no-row-drag="true"]')
+    ) {
+      e.preventDefault()
+      return
+    }
+
     setDraggedId(id)
     dragNodeRef.current = node
+    dropIndicatorRootRef.current = node.getRootNode() as ParentNode
     e.dataTransfer.effectAllowed = "move"
     // 必须调用 setData，部分站点在拖拽冒泡（bubbling）阶段会检测 dataTransfer 为空并取消拖拽
     e.dataTransfer.setData("text/plain", id)
@@ -863,25 +891,24 @@ export const PromptsTab: React.FC<PromptsTabProps> = ({
     const target = e.currentTarget as HTMLElement
     const rect = target.getBoundingClientRect()
     const midpoint = rect.top + rect.height / 2
+    const targetRoot = target.getRootNode() as ParentNode
 
-    document.querySelectorAll(".drop-above, .drop-below").forEach((el) => {
-      el.classList.remove("drop-above", "drop-below")
-    })
+    dropIndicatorRootRef.current = targetRoot
+    clearPromptDropIndicators()
 
     if (e.clientY < midpoint) {
       target.classList.add("drop-above")
     } else {
       target.classList.add("drop-below")
     }
+    dropIndicatorRootRef.current = targetRoot
   }
 
   const handleDragEnd = () => {
     if (dragNodeRef.current) {
       dragNodeRef.current.classList.remove("dragging")
     }
-    document.querySelectorAll(".drop-above, .drop-below").forEach((el) => {
-      el.classList.remove("drop-above", "drop-below")
-    })
+    clearPromptDropIndicators()
     setDraggedId(null)
     dragNodeRef.current = null
   }
@@ -1832,7 +1859,7 @@ export const PromptsTab: React.FC<PromptsTabProps> = ({
                 className={`prompt-item ${isHighlighted ? "selected" : ""} ${isLocated ? "located" : ""} ${draggedId === p.id ? "dragging" : ""}`}
                 onClick={() => handlePromptClick(p)}
                 onDoubleClick={() => handlePromptDoubleClick(p)}
-                draggable={false}
+                draggable
                 onDragStart={(e) => handleDragStart(e, p.id, e.currentTarget as HTMLDivElement)}
                 onDragOver={(e) => handleDragOver(e, p.id)}
                 onDragEnd={handleDragEnd}
@@ -1911,22 +1938,6 @@ export const PromptsTab: React.FC<PromptsTabProps> = ({
                       onClick={(e) => handleTogglePin(p.id, e)}
                       className={`prompt-action-btn${p.pinned ? " active" : ""}`}>
                       <PinIcon size={16} filled={p.pinned} />
-                    </button>
-                  </Tooltip>
-                  <Tooltip content="拖动排序">
-                    <button
-                      onMouseDown={(e) => {
-                        e.stopPropagation()
-                        const item = e.currentTarget.closest(".prompt-item") as HTMLDivElement
-                        if (item) item.draggable = true
-                      }}
-                      onMouseUp={(e) => {
-                        const item = e.currentTarget.closest(".prompt-item") as HTMLDivElement
-                        if (item) item.draggable = false
-                      }}
-                      className="prompt-action-btn"
-                      style={{ cursor: "grab" }}>
-                      <DragIcon size={16} />
                     </button>
                   </Tooltip>
                   {/* ⭐ 预览按钮 */}
