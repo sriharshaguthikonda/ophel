@@ -9,11 +9,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### ✨ New Features
+### 🚀 New Features
 
 - **Prompt queue and library integration** — Prompt Library actions can now add prompts to the queue, and the queue batch dialog can add prompts directly from the library. (#547, @mrpops2ko)
 
-### 🔧 Improvements
+### ✨ Improvements
 
 - **Direct row drag sorting** — Prompt items and conversation folders can now be reordered by long-press dragging the row itself, matching the existing conversation-item interaction without requiring a dedicated drag handle.
 - **Clearer outline tab icon** — Updated the Outline tab and tab-order settings icon to better communicate the outline hierarchy while keeping the previous document-style icon for empty states.
@@ -27,7 +27,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [1.0.53] - 2026-05-25
 
-### ✨ New Features
+### 🚀 New Features
 
 - **Formula copy format setting** — Double-click formula copy can now output either LaTeX source or MathML source. LaTeX delimiter wrapping remains available for LaTeX mode, while MathML mode copies the serialized `<math>` source when the site exposes one.
 
@@ -44,7 +44,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [1.0.52] - 2026-05-22
 
-### ✨ New Features
+### 🚀 New Features
 
 - **Hover Ophel logo to temporarily preview the panel** — When the panel is collapsed into the Quick Buttons logo, hovering the logo now opens a temporary panel preview anchored beside the Quick Buttons group. The preview does not persist the panel's expanded state, and clicking the logo still performs the regular panel toggle. (#524)
 - **Title format token chips** — The title format input in Settings now renders `{status}`, `{title}`, and `{model}` placeholders as styled blue chips, making the format template easier to read and edit at a glance.
@@ -63,7 +63,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [1.0.51] - 2026-05-20
 
-### ✨ New Features
+### 🚀 New Features
 
 - **Quick Buttons proximity wake radius** (`Settings → Quick Buttons`): A new slider controls how close the cursor must be before the floating widget auto-expands (default 150 px, matching previous behavior). Set it to **0** for a true dwell-hover mode — the widget only expands after the cursor rests on the water-drop for 300 ms, preventing accidental expansion from the cursor passing through. (#492)
 - **Drag conversations into folders**: In the Conversations tab, you can now drag a chat onto any folder to move it there. Thanks @t0ny-peng (#512)
