@@ -7,19 +7,21 @@
 
 import { t } from "~utils/i18n"
 import { showToast } from "~utils/toast"
+import { platform } from "~platform"
 
 // 使用 String.fromCodePoint 在运行时生成 emoji
 // 避免构建工具将 Unicode 转义序列转换为 UTF-16 代理对字符串
 const EMOJI_EXPORT = String.fromCodePoint(0x1f4e4) // 📤
 const EMOJI_USER = String.fromCodePoint(0x1f64b) // 🙋
 const EMOJI_ASSISTANT = String.fromCodePoint(0x1f916) // 🤖
+export const EXPORT_MARKDOWN_HREF_ATTR = "data-ophel-export-markdown-href"
 
 export interface ExportMessage {
   role: "user" | "assistant" | string
   content: string
 }
 
-export type ExportAssetKind = "image" | "document" | "file" | "reference"
+export type ExportAssetKind = "image" | "document" | "file" | "audio" | "video" | "reference"
 
 export interface ExportAsset {
   id?: string
@@ -514,7 +516,7 @@ export function htmlToMarkdown(el: Element): string {
         case "i":
           return `*${renderChildren(element, context)}*`
         case "a":
-          return `[${renderChildren(element, context)}](${(element as HTMLAnchorElement).href || ""})`
+          return `[${renderChildren(element, context)}](${element.getAttribute(EXPORT_MARKDOWN_HREF_ATTR) || (element as HTMLAnchorElement).href || ""})`
         case "li":
           return renderListItem(
             element,
@@ -809,12 +811,31 @@ async function resolveAssetData(
     throw new Error("Asset has no content or source URL")
   }
 
-  const response = await fetch(asset.sourceUrl, { credentials: "include" })
-  if (!response.ok) {
-    throw new Error(`Asset fetch failed with HTTP ${response.status}`)
-  }
+  try {
+    const response = await fetch(asset.sourceUrl, { credentials: "include" })
+    if (!response.ok) {
+      throw new Error(`Asset fetch failed with HTTP ${response.status}`)
+    }
 
-  return response.blob()
+    return response.blob()
+  } catch (pageFetchError) {
+    if (!/^https?:\/\//i.test(asset.sourceUrl)) {
+      throw pageFetchError
+    }
+
+    try {
+      const response = await platform.fetch(asset.sourceUrl)
+      if (!response.ok) {
+        throw new Error(`Asset proxy fetch failed with HTTP ${response.status}`)
+      }
+
+      return response.blob()
+    } catch (proxyFetchError) {
+      throw new Error(
+        `Asset fetch failed: ${getErrorMessage(pageFetchError)}; proxy fetch failed: ${getErrorMessage(proxyFetchError)}`,
+      )
+    }
+  }
 }
 
 function getErrorMessage(error: unknown): string {

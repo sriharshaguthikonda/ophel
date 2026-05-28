@@ -502,6 +502,11 @@ export const en = {
   exportIncludeThoughtsDesc:
     "Include and auto-expand thoughts when exporting (rendered as blockquotes)",
   exportAttachmentsLabel: "Attachments",
+  exportPackagingLabel: "Markdown Export Method",
+  exportPackagingDesc:
+    "ZIP includes the Markdown file and downloadable attachments, storing attachments in assets and referencing them with relative paths.",
+  exportPackagingMarkdown: "Markdown",
+  exportPackagingZip: "ZIP",
   userQueryMarkdownLabel: "User Query Style Enhancement",
   userQueryMarkdownDesc: "Apply Markdown formatting and LaTeX math rendering to user queries",
   assistantMermaidPreviewTab: "Diagram",

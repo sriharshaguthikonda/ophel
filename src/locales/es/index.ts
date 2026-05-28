@@ -1192,6 +1192,11 @@ Dame el código y luego un resumen de mejoras.`,
   exportIncludeThoughtsDesc:
     "Incluir y expandir automáticamente el razonamiento al exportar (como bloques de cita)",
   exportAttachmentsLabel: "Archivos adjuntos",
+  exportPackagingLabel: "Método de exportación Markdown",
+  exportPackagingDesc:
+    "ZIP incluye el archivo Markdown y los adjuntos descargables, guarda los adjuntos en assets y los referencia con rutas relativas.",
+  exportPackagingMarkdown: "Markdown",
+  exportPackagingZip: "ZIP",
 
   // ======== Popup ========
   popupCurrentSite: "Sitio Actual",

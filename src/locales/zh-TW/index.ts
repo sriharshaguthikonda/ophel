@@ -1205,6 +1205,11 @@ export const zhTW = {
   exportIncludeThoughtsLabel: "匯出包含思維鏈",
   exportIncludeThoughtsDesc: "匯出時包含並自動展開思維鏈內容（使用引用區塊區分）",
   exportAttachmentsLabel: "附件",
+  exportPackagingLabel: "Markdown 匯出方式",
+  exportPackagingDesc:
+    "ZIP 會包含 Markdown 檔案與可下載附件，" + "附件放入 assets 並以相對路徑引用",
+  exportPackagingMarkdown: "Markdown",
+  exportPackagingZip: "ZIP",
 
   // ======== Popup 頁面 ========
   popupCurrentSite: "目前站點",

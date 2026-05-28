@@ -8,6 +8,7 @@ import { geminiNativeThemeCss } from "~styles/native-theme-adapters/gemini"
 import { DOMToolkit } from "~utils/dom-toolkit"
 import {
   createUniqueExportAssetPath,
+  EXPORT_MARKDOWN_HREF_ATTR,
   htmlToMarkdown,
   type ExportAsset,
   type ExportBundle,
@@ -91,12 +92,14 @@ const GEMINI_USER_QUERY_IMAGE_SELECTOR = [
   "user-query img[data-test-id='uploaded-img']",
   "user-query .preview-image",
 ].join(", ")
+const GEMINI_UPLOADED_FILE_SELECTOR = '[data-test-id="uploaded-file"]'
 const GEMINI_SHARE_TURN_SELECTOR = "share-landing-page .share-turn-viewer"
+const GEMINI_SHARE_ASSISTANT_MARKDOWN_SELECTOR = "message-content .markdown"
 const GEMINI_DEEP_RESEARCH_DOCUMENT_SHARE_SELECTOR =
   'share-landing-page immersive-share-landing-page structured-content-container[data-test-id="deep-research-block"]'
 const GEMINI_DEEP_RESEARCH_ARTIFACT_SHARE_SELECTOR =
   'share-landing-page structured-content-container[data-test-id="immersive-artifact-content"]'
-const GEMINI_DEEP_RESEARCH_MARKDOWN_SELECTOR = "message-content .markdown"
+const GEMINI_DEEP_RESEARCH_MARKDOWN_SELECTOR = GEMINI_SHARE_ASSISTANT_MARKDOWN_SELECTOR
 const GEMINI_DEEP_RESEARCH_CONFIRMATION_SELECTOR = "deep-research-confirmation-widget"
 const GEMINI_DEEP_RESEARCH_IMMERSIVE_PANEL_SELECTOR =
   "immersive-panel deep-research-immersive-panel"
@@ -164,6 +167,7 @@ interface GeminiExportLifecycleState {
 interface GeminiExportAssetCollector {
   assets: ExportAsset[]
   imagePathsBySource: Map<string, string>
+  filePathsBySource: Map<string, string>
   usedPaths: Set<string>
 }
 
@@ -2072,7 +2076,33 @@ export class GeminiAdapter extends SiteAdapter {
   ): string {
     const sanitized = this.sanitizeUserQueryElement(element)
     const imageMarkdown = this.extractUserQueryImageMarkdown(sanitized, collector)
-    const fileMarkdown = this.extractUserQueryFileMarkdown(sanitized)
+    const fileMarkdown = this.extractUserQueryFileMarkdown(sanitized, collector)
+    const markdown = this.extractUserQueryMarkdown(sanitized).trim()
+    const textContent = markdown || this.extractUserQueryText(sanitized).trim()
+
+    if (imageMarkdown.length === 0 && fileMarkdown.length === 0) {
+      return textContent
+    }
+
+    const fileBlock =
+      fileMarkdown.length > 0
+        ? `${t("exportAttachmentsLabel") || "Attachments"}:\n${fileMarkdown.join("\n")}`
+        : ""
+
+    return [imageMarkdown.join("\n\n"), fileBlock, textContent].filter(Boolean).join("\n\n")
+  }
+
+  private async extractUserQueryExportContentWithResolvedAssets(
+    element: Element,
+    collector: GeminiExportAssetCollector,
+  ): Promise<string> {
+    const sanitized = this.sanitizeUserQueryElement(element)
+    const imageMarkdown = this.extractUserQueryImageMarkdown(sanitized, collector)
+    const fileMarkdown = await this.extractUserQueryFileMarkdownWithResolvedAssets(
+      element,
+      sanitized,
+      collector,
+    )
     const markdown = this.extractUserQueryMarkdown(sanitized).trim()
     const textContent = markdown || this.extractUserQueryText(sanitized).trim()
 
@@ -2089,7 +2119,7 @@ export class GeminiAdapter extends SiteAdapter {
   }
 
   async prepareConversationExport(_context: ExportLifecycleContext): Promise<unknown> {
-    await this.prepareImagesForExport()
+    await this.prepareImagesForExport(_context)
 
     const state: GeminiExportLifecycleState = {
       openedDeepResearchPanel: false,
@@ -2113,7 +2143,7 @@ export class GeminiAdapter extends SiteAdapter {
     }
   }
 
-  private async prepareImagesForExport(): Promise<void> {
+  private async prepareImagesForExport(context: ExportLifecycleContext): Promise<void> {
     this.clearPreparedExportImageMetadata()
 
     const images = Array.from(
@@ -2124,7 +2154,7 @@ export class GeminiAdapter extends SiteAdapter {
 
     for (const image of images) {
       try {
-        const exportSrc = await this.resolvePreparedExportImageSrc(image)
+        const exportSrc = await this.resolvePreparedExportImageSrc(image, context)
         if (!exportSrc) continue
         image.setAttribute(GEMINI_EXPORT_IMAGE_SRC_ATTR, exportSrc)
       } catch (error) {
@@ -2246,8 +2276,11 @@ export class GeminiAdapter extends SiteAdapter {
     return new Blob([bytes], { type: mimeType })
   }
 
-  private extractUserQueryFileMarkdown(element: Element): string[] {
-    const files = Array.from(element.querySelectorAll('[data-test-id="uploaded-file"]'))
+  private extractUserQueryFileMarkdown(
+    element: Element,
+    collector?: GeminiExportAssetCollector,
+  ): string[] {
+    const files = Array.from(element.querySelectorAll(GEMINI_UPLOADED_FILE_SELECTOR))
     const fileMarkdown: string[] = []
     const seenFiles = new Set<string>()
 
@@ -2258,7 +2291,11 @@ export class GeminiAdapter extends SiteAdapter {
       const type = this.extractUserQueryFileType(file)
       const label = type && !this.fileNameEndsWithType(name, type) ? `${name} (${type})` : name
       const href = this.extractUserQueryFileHref(file)
-      const markdown = href ? `- [${this.escapeMarkdownLinkText(label)}](${href})` : `- ${label}`
+      const assetPath =
+        href && collector ? this.addFileExportAsset(collector, href, name, type || undefined) : href
+      const markdown = assetPath
+        ? `- [${this.escapeMarkdownLinkText(label)}](${assetPath})`
+        : `- ${label}`
 
       if (seenFiles.has(markdown)) continue
 
@@ -2267,6 +2304,393 @@ export class GeminiAdapter extends SiteAdapter {
     }
 
     return fileMarkdown
+  }
+
+  private async extractUserQueryFileMarkdownWithResolvedAssets(
+    sourceElement: Element,
+    sanitizedElement: Element,
+    collector: GeminiExportAssetCollector,
+  ): Promise<string[]> {
+    const sourceFiles = Array.from(sourceElement.querySelectorAll(GEMINI_UPLOADED_FILE_SELECTOR))
+    const sanitizedFiles = Array.from(
+      sanitizedElement.querySelectorAll(GEMINI_UPLOADED_FILE_SELECTOR),
+    )
+    const fileMarkdown: string[] = []
+    const seenFiles = new Set<string>()
+
+    for (let index = 0; index < sanitizedFiles.length; index += 1) {
+      const file = sanitizedFiles[index]
+      const sourceFile = sourceFiles[index] || null
+      const name = this.extractUserQueryFileName(file)
+      if (!name) continue
+
+      const type = this.extractUserQueryFileType(file)
+      const label = type && !this.fileNameEndsWithType(name, type) ? `${name} (${type})` : name
+      const href = this.extractUserQueryFileHref(file)
+      let assetPath = href ? this.addFileExportAsset(collector, href, name, type || undefined) : ""
+
+      if (!assetPath && sourceFile) {
+        const viewerDocument = await this.extractUserQueryViewerDocument(sourceFile, name)
+        if (viewerDocument) {
+          assetPath = this.addInlineDocumentExportAsset(
+            collector,
+            viewerDocument.content,
+            viewerDocument.name || name,
+            viewerDocument.mimeType,
+          )
+        }
+      }
+
+      const markdown = assetPath
+        ? `- [${this.escapeMarkdownLinkText(label)}](${assetPath})`
+        : `- ${label}`
+
+      if (seenFiles.has(markdown)) continue
+
+      seenFiles.add(markdown)
+      fileMarkdown.push(markdown)
+    }
+
+    return fileMarkdown
+  }
+
+  private addInlineDocumentExportAsset(
+    collector: GeminiExportAssetCollector,
+    content: string,
+    requestedName: string,
+    mimeType?: string,
+  ): string {
+    const filename = this.ensureExportFilenameExtension(
+      this.sanitizeGeminiExportFilename(requestedName || "gemini-document"),
+      "",
+      mimeType || "text/plain",
+    )
+    const existing = collector.assets.find(
+      (asset) => asset.kind === "document" && asset.name === filename && asset.content === content,
+    )
+    if (existing?.relativePath) return existing.relativePath
+
+    const path = this.createUniqueGeminiExportPath(`assets/files/${filename}`, collector)
+    const name = path.split("/").pop() || filename
+
+    collector.assets.push({
+      id: `gemini-document-${collector.assets.length + 1}`,
+      name,
+      relativePath: path,
+      mimeType: mimeType || this.getExportAssetMimeType("", name, "document"),
+      kind: "document",
+      content,
+      description: requestedName || undefined,
+    })
+
+    return path
+  }
+
+  private async extractUserQueryViewerDocument(
+    file: Element,
+    fallbackName: string,
+  ): Promise<{ name: string; mimeType?: string; content: string } | null> {
+    const trigger = this.getUserQueryFilePreviewTrigger(file)
+    if (!trigger) return null
+
+    const previousViewer = document.querySelector("immersive-panel .drive-viewer")
+    trigger.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    this.simulateClick(trigger)
+
+    const viewer = (await this.waitForDriveViewer(previousViewer)) || previousViewer
+    if (!viewer) return null
+
+    try {
+      const viewerDocument = await this.waitForDriveViewerDocument(viewer, fallbackName)
+      if (!viewerDocument) {
+        console.warn("[GeminiAdapter] Failed to extract uploaded file viewer document", {
+          name: fallbackName,
+          viewerTextContainers: document.querySelectorAll(
+            "immersive-panel .drive-viewer-text-content",
+          ).length,
+          visibleViewers: Array.from(
+            document.querySelectorAll("immersive-panel .drive-viewer"),
+          ).filter((panel) => this.isVisible(panel)).length,
+        })
+      }
+      return viewerDocument
+        ? {
+            name: viewerDocument.name || fallbackName,
+            mimeType: viewerDocument.mimeType,
+            content: viewerDocument.content,
+          }
+        : null
+    } finally {
+      await this.closeDriveViewer(viewer)
+    }
+  }
+
+  private getUserQueryFilePreviewTrigger(file: Element): HTMLElement | null {
+    const candidates = [
+      file.matches("button, [role='button']") ? file : null,
+      file.querySelector("button"),
+      file.querySelector("[role='button']"),
+    ]
+
+    return (
+      candidates.find((candidate): candidate is HTMLElement => candidate instanceof HTMLElement) ||
+      null
+    )
+  }
+
+  private async waitForDriveViewer(
+    previousViewer: Element | null,
+    timeoutMs = 3000,
+  ): Promise<Element | null> {
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < timeoutMs) {
+      const viewers = Array.from(document.querySelectorAll("immersive-panel .drive-viewer"))
+      const viewer = viewers.find((candidate) => candidate !== previousViewer)
+      if (viewer) return viewer
+      if (!previousViewer && viewers[0]) return viewers[0]
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+
+    return null
+  }
+
+  private async waitForDriveViewerDocument(
+    viewer: Element,
+    expectedName: string,
+    timeoutMs = 5000,
+  ): Promise<{ name: string; mimeType?: string; content: string } | null> {
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < timeoutMs) {
+      const contentElement = this.findActiveDriveViewerTextContent(expectedName) || null
+      const content = this.decodeDriveViewerText(contentElement?.textContent || "")
+      if (content) {
+        const owner = contentElement?.closest(".drive-viewer") || viewer
+        return {
+          name: this.extractDriveViewerDocumentName(owner),
+          mimeType: this.extractDriveViewerDocumentMimeType(owner),
+          content,
+        }
+      }
+
+      const error = Array.from(viewer.querySelectorAll(".drive-viewer-msg-error")).find((node) =>
+        this.isVisible(node),
+      )
+      if (error) {
+        return null
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+
+    return null
+  }
+
+  private findActiveDriveViewerTextContent(expectedName: string): Element | null {
+    const panels = Array.from(document.querySelectorAll("immersive-panel .drive-viewer"))
+    const expectedBaseName = expectedName.replace(/\.[A-Za-z0-9]{1,10}$/, "")
+
+    const matchingPanel =
+      panels.find((panel) => {
+        const name = this.extractDriveViewerDocumentName(panel)
+        return (
+          name === expectedName ||
+          name === expectedBaseName ||
+          name.startsWith(`${expectedBaseName}.`) ||
+          expectedName.startsWith(`${name}.`)
+        )
+      }) || panels[panels.length - 1]
+
+    const candidates = Array.from(
+      (matchingPanel || document).querySelectorAll(
+        ".drive-viewer-text-content pre, .drive-viewer-text-content",
+      ),
+    )
+
+    return (
+      candidates.find((candidate) => this.isVisible(candidate)) ||
+      candidates.find((candidate) => this.decodeDriveViewerText(candidate.textContent || "")) ||
+      null
+    )
+  }
+
+  private decodeDriveViewerText(value: string): string {
+    return value.replace(/\r\n/g, "\n").trim()
+  }
+
+  private extractDriveViewerDocumentName(viewer: Element): string {
+    const info = this.parseDriveActiveItemInfo(viewer)
+    const toolstripName = this.getNormalizedText(
+      viewer.querySelector(".drive-viewer-toolstrip-name"),
+    )
+    return info?.title || toolstripName || ""
+  }
+
+  private extractDriveViewerDocumentMimeType(viewer: Element): string | undefined {
+    return this.parseDriveActiveItemInfo(viewer)?.mimeType
+  }
+
+  private parseDriveActiveItemInfo(viewer: Element): { title?: string; mimeType?: string } | null {
+    const info = Array.from(
+      viewer.querySelectorAll('[id="drive-active-item-info"], div[style*="display:none"]'),
+    )
+      .map((node) => node.textContent?.trim() || "")
+      .find((text) => text.startsWith("{") && text.includes('"title"'))
+    if (!info) return null
+
+    try {
+      const parsed = JSON.parse(info) as { title?: string; mimeType?: string }
+      return parsed && typeof parsed === "object" ? parsed : null
+    } catch {
+      return null
+    }
+  }
+
+  private async closeDriveViewer(viewer: Element): Promise<void> {
+    const closeButton = viewer.querySelector(".drive-viewer-close-button")
+    if (closeButton instanceof HTMLElement) {
+      this.simulateClick(closeButton)
+      await new Promise((resolve) => setTimeout(resolve, 150))
+    }
+  }
+
+  private addFileExportAsset(
+    collector: GeminiExportAssetCollector,
+    source: string,
+    requestedName: string,
+    mimeHint?: string,
+    kind: ExportAsset["kind"] = "file",
+  ): string {
+    const existingPath = collector.filePathsBySource.get(source)
+    if (existingPath) return existingPath
+
+    const filename = this.ensureExportFilenameExtension(
+      this.sanitizeGeminiExportFilename(requestedName || "gemini-file"),
+      source,
+      mimeHint,
+    )
+    const path = this.createUniqueGeminiExportPath(`assets/files/${filename}`, collector)
+    const name = path.split("/").pop() || filename
+    const mimeType = this.getExportAssetMimeType(source, mimeHint || name, kind)
+
+    collector.filePathsBySource.set(source, path)
+    collector.assets.push({
+      id: `gemini-${kind || "file"}-${collector.filePathsBySource.size}`,
+      name,
+      relativePath: path,
+      mimeType,
+      kind,
+      content: source.startsWith("data:") ? this.dataUrlToExportBlob(source) : undefined,
+      sourceUrl: source.startsWith("data:") ? undefined : source,
+      description: requestedName || undefined,
+    })
+
+    return path
+  }
+
+  private sanitizeGeminiExportFilename(value: string): string {
+    return value
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
+      .replace(/\s+/g, " ")
+      .trim()
+      .substring(0, 120)
+  }
+
+  private ensureExportFilenameExtension(
+    filename: string,
+    source: string,
+    mimeHint?: string,
+  ): string {
+    const cleanName = filename || "gemini-file"
+    if (/\.[A-Za-z0-9]{1,10}$/.test(cleanName)) return cleanName
+
+    const extension =
+      this.getExportAssetExtension(source) || this.getExtensionFromMimeType(mimeHint || "")
+    return extension ? `${cleanName}.${extension}` : cleanName
+  }
+
+  private getExportAssetExtension(source: string): string {
+    if (source.startsWith("data:")) {
+      const mimeType = source.match(/^data:([^;,]+)/)?.[1] || ""
+      return this.getExtensionFromMimeType(mimeType)
+    }
+
+    try {
+      const pathname = new URL(source, window.location.href).pathname
+      return pathname.match(/\.([A-Za-z0-9]{1,10})$/)?.[1]?.toLowerCase() || ""
+    } catch {
+      return ""
+    }
+  }
+
+  private getExportAssetMimeType(
+    source: string,
+    hint: string,
+    kind: ExportAsset["kind"],
+  ): string | undefined {
+    if (source.startsWith("data:")) {
+      return source.match(/^data:([^;,]+)/)?.[1] || undefined
+    }
+
+    const lowerHint = hint.toLowerCase()
+    const extension = lowerHint.match(/\.([a-z0-9]{1,10})$/)?.[1] || lowerHint
+    const fromExtension = extension ? this.getMimeTypeFromExtension(extension) : ""
+    if (fromExtension) return fromExtension
+
+    if (kind === "audio") return "audio/mpeg"
+    if (kind === "video") return "video/mp4"
+    return undefined
+  }
+
+  private getMimeTypeFromExtension(extension: string): string {
+    const normalized = extension.toLowerCase()
+    const mimeTypes: Record<string, string> = {
+      avif: "image/avif",
+      csv: "text/csv",
+      gif: "image/gif",
+      htm: "text/html",
+      html: "text/html",
+      jpeg: "image/jpeg",
+      jpg: "image/jpeg",
+      json: "application/json",
+      m4a: "audio/mp4",
+      md: "text/markdown;charset=utf-8",
+      mp3: "audio/mpeg",
+      mp4: "video/mp4",
+      ogg: "audio/ogg",
+      pdf: "application/pdf",
+      png: "image/png",
+      txt: "text/plain;charset=utf-8",
+      wav: "audio/wav",
+      webm: "video/webm",
+      webp: "image/webp",
+    }
+    return mimeTypes[normalized] || ""
+  }
+
+  private getExtensionFromMimeType(mimeType: string): string {
+    const normalized = mimeType.toLowerCase().split(";")[0].trim()
+    const extensions: Record<string, string> = {
+      "application/json": "json",
+      "application/pdf": "pdf",
+      "audio/mpeg": "mp3",
+      "audio/mp4": "m4a",
+      "audio/ogg": "ogg",
+      "audio/wav": "wav",
+      "image/avif": "avif",
+      "image/gif": "gif",
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/svg+xml": "svg",
+      "image/webp": "webp",
+      "text/csv": "csv",
+      "text/html": "html",
+      "text/markdown": "md",
+      "text/plain": "txt",
+      "video/mp4": "mp4",
+      "video/webm": "webm",
+    }
+    return extensions[normalized] || ""
   }
 
   private extractUserQueryFileName(file: Element): string {
@@ -2317,8 +2741,8 @@ export class GeminiAdapter extends SiteAdapter {
     )
 
     for (const link of links) {
-      const href = this.normalizeExportImageUrl(link.href || link.getAttribute("href") || "")
-      if (this.isStablePreparedExportImageUrl(href)) return href
+      const href = this.normalizeExportAssetUrl(link.href || link.getAttribute("href") || "")
+      if (this.isDownloadableExportAssetUrl(href)) return href
     }
 
     return ""
@@ -2347,7 +2771,10 @@ export class GeminiAdapter extends SiteAdapter {
     return ""
   }
 
-  private async resolvePreparedExportImageSrc(image: HTMLImageElement): Promise<string> {
+  private async resolvePreparedExportImageSrc(
+    image: HTMLImageElement,
+    context: ExportLifecycleContext,
+  ): Promise<string> {
     const directCandidates = [this.getPreparedExportImageSrc(image)]
     const fallbackCandidates = [
       image.getAttribute(GEMINI_EXPORT_IMAGE_SRC_ATTR) || "",
@@ -2360,6 +2787,10 @@ export class GeminiAdapter extends SiteAdapter {
     for (const rawCandidate of directCandidates) {
       const candidate = this.normalizeExportImageUrl(rawCandidate)
       if (!candidate) continue
+
+      if (this.shouldInlineUserQueryImageForExport(image, context)) {
+        return this.resolveExportImageDataUrl(candidate)
+      }
 
       if (this.isStablePreparedExportImageUrl(candidate)) {
         return candidate
@@ -2377,6 +2808,35 @@ export class GeminiAdapter extends SiteAdapter {
     return this.convertBlobUrlToDataUrl(blobCandidate)
   }
 
+  private shouldInlineUserQueryImageForExport(
+    image: HTMLImageElement,
+    context: ExportLifecycleContext,
+  ): boolean {
+    return (
+      context.format === "markdown" &&
+      context.packaging === "markdown" &&
+      image.closest("user-query") !== null
+    )
+  }
+
+  private async resolveExportImageDataUrl(source: string): Promise<string> {
+    if (source.startsWith("data:image/")) return source
+    if (source.startsWith("blob:")) return this.convertBlobUrlToDataUrl(source)
+    if (!/^https?:\/\//i.test(source)) return ""
+
+    try {
+      const response = await platform.fetch(source)
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      const blob = await response.blob()
+      return this.convertBlobToDataUrl(blob)
+    } catch (error) {
+      console.warn("[GeminiAdapter] Failed to inline user query image for Markdown export", error)
+      return source
+    }
+  }
+
   private normalizeExportImageUrl(value: string): string {
     if (!value) return ""
     if (value.startsWith("blob:") || value.startsWith("data:image/")) {
@@ -2390,6 +2850,34 @@ export class GeminiAdapter extends SiteAdapter {
     }
   }
 
+  private normalizeExportAssetUrl(value: string): string {
+    if (!value) return ""
+    if (/^(blob:|data:)/i.test(value)) return value
+
+    try {
+      return new URL(value, window.location.href).toString()
+    } catch {
+      return value
+    }
+  }
+
+  private isDownloadableExportAssetUrl(value: string): boolean {
+    if (!value) return false
+    if (/^(blob:|data:)/i.test(value)) return true
+    if (!/^https?:\/\//i.test(value)) return false
+
+    try {
+      const url = new URL(value)
+      if (url.hostname === window.location.hostname && /^\/?(app|share)(\/|$)/.test(url.pathname)) {
+        return false
+      }
+      if (/faviconV2|google_logo_icon|\/32\/type\//i.test(url.href)) return false
+      return true
+    } catch {
+      return false
+    }
+  }
+
   private isStablePreparedExportImageUrl(value: string): boolean {
     if (!value) return false
     if (value.startsWith("data:image/")) return true
@@ -2400,7 +2888,10 @@ export class GeminiAdapter extends SiteAdapter {
   private async convertBlobUrlToDataUrl(blobUrl: string): Promise<string> {
     const response = await fetch(blobUrl)
     const blob = await response.blob()
+    return this.convertBlobToDataUrl(blob)
+  }
 
+  private async convertBlobToDataUrl(blob: Blob): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => {
@@ -2556,6 +3047,8 @@ export class GeminiAdapter extends SiteAdapter {
     const sanitized = this.sanitizeAssistantExportElement(element)
     if (collector) {
       this.replaceAssistantImageSourcesWithExportAssets(sanitized, collector)
+      this.replaceAssistantMediaSourcesWithExportAssets(sanitized, collector)
+      this.replaceAssistantDownloadLinksWithExportAssets(sanitized, collector)
     }
     return this.extractMarkdownExportContent(sanitized)
   }
@@ -2569,6 +3062,10 @@ export class GeminiAdapter extends SiteAdapter {
       return this.extractDeepResearchConversationShareMessages()
     }
 
+    if (this.isGeminiConversationSharePage()) {
+      return this.extractGeminiConversationShareMessages()
+    }
+
     if (this.isDeepResearchAppPage()) {
       return this.extractDeepResearchAppMessages()
     }
@@ -2580,6 +3077,7 @@ export class GeminiAdapter extends SiteAdapter {
     const collector: GeminiExportAssetCollector = {
       assets: [],
       imagePathsBySource: new Map<string, string>(),
+      filePathsBySource: new Map<string, string>(),
       usedPaths: new Set<string>(),
     }
 
@@ -2604,11 +3102,45 @@ export class GeminiAdapter extends SiteAdapter {
       return this.extractDeepResearchConversationShareMessages(collector)
     }
 
+    if (this.isGeminiConversationSharePage()) {
+      return this.extractGeminiConversationShareMessages(collector)
+    }
+
     if (this.isDeepResearchAppPage()) {
       return this.extractDeepResearchAppMessages(collector)
     }
 
-    return null
+    return this.extractGeminiConversationMessagesWithAssets(collector)
+  }
+
+  private async extractGeminiConversationMessagesWithAssets(
+    collector: GeminiExportAssetCollector,
+  ): Promise<ExportMessage[] | null> {
+    const root =
+      document.querySelector(this.getResponseContainerSelector()) || this.getScrollContainer()
+    if (!root) return null
+
+    const messageElements = Array.from(root.querySelectorAll("user-query, model-response")).sort(
+      (left, right) => this.compareDomOrder(left, right),
+    )
+    if (messageElements.length === 0) return null
+
+    const messages: ExportMessage[] = []
+    for (const element of messageElements) {
+      if (element.closest("immersive-panel")) continue
+
+      const role = element.tagName.toLowerCase() === "user-query" ? "user" : "assistant"
+      const content =
+        role === "user"
+          ? (await this.extractUserQueryExportContentWithResolvedAssets(element, collector)).trim()
+          : this.extractAssistantResponseTextWithAssets(element, collector).trim()
+
+      if (!content) continue
+      messages.push({ role, content })
+    }
+
+    const deduped = this.dedupeAdjacentExportMessages(messages)
+    return deduped.length > 0 ? deduped : null
   }
 
   private replaceAssistantImageSourcesWithExportAssets(
@@ -2630,6 +3162,157 @@ export class GeminiAdapter extends SiteAdapter {
       image.setAttribute("src", assetPath)
       image.removeAttribute("srcset")
     })
+  }
+
+  private replaceAssistantMediaSourcesWithExportAssets(
+    root: Element,
+    collector: GeminiExportAssetCollector,
+  ): void {
+    const mediaElements = Array.from(root.querySelectorAll("audio, video")).filter(
+      (node): node is HTMLMediaElement => node instanceof HTMLMediaElement,
+    )
+
+    mediaElements.forEach((media) => {
+      const mediaSource = this.extractAssistantMediaSource(media)
+      if (!mediaSource) return
+
+      const kind: ExportAsset["kind"] = media.tagName.toLowerCase() === "video" ? "video" : "audio"
+      const label = this.buildAssistantMediaAssetName(media, kind, mediaSource.source)
+      const assetPath = this.addFileExportAsset(
+        collector,
+        mediaSource.source,
+        label,
+        mediaSource.mimeType,
+        kind,
+      )
+
+      media.replaceWith(this.createExportAssetLinkElement(label, assetPath))
+    })
+  }
+
+  private replaceAssistantDownloadLinksWithExportAssets(
+    root: Element,
+    collector: GeminiExportAssetCollector,
+  ): void {
+    const links = Array.from(root.querySelectorAll("a[href]")).filter(
+      (node): node is HTMLAnchorElement => node instanceof HTMLAnchorElement,
+    )
+
+    links.forEach((link) => {
+      if (!this.isAssistantExportDownloadLink(link)) return
+
+      const source = this.normalizeExportAssetUrl(link.getAttribute("href") || link.href || "")
+      if (!this.isDownloadableExportAssetUrl(source)) return
+
+      const label = this.buildAssistantDownloadAssetName(link, source)
+      const kind = this.inferExportAssetKind(source, label)
+      const assetPath = this.addFileExportAsset(collector, source, label, undefined, kind)
+      link.setAttribute("href", assetPath)
+      link.setAttribute(EXPORT_MARKDOWN_HREF_ATTR, assetPath)
+      link.removeAttribute("target")
+      link.removeAttribute("rel")
+    })
+  }
+
+  private extractAssistantMediaSource(
+    media: HTMLMediaElement,
+  ): { source: string; mimeType?: string } | null {
+    const directCandidates = [
+      media.currentSrc || "",
+      media.getAttribute("src") || "",
+      "src" in media ? String(media.src || "") : "",
+    ]
+
+    const sourceElements = Array.from(media.querySelectorAll("source[src]")).filter(
+      (node): node is HTMLSourceElement => node instanceof HTMLSourceElement,
+    )
+    const candidates = [
+      ...directCandidates.map((source) => ({ source, mimeType: media.getAttribute("type") || "" })),
+      ...sourceElements.map((sourceElement) => ({
+        source: sourceElement.getAttribute("src") || sourceElement.src || "",
+        mimeType: sourceElement.type || "",
+      })),
+    ]
+
+    for (const candidate of candidates) {
+      const source = this.normalizeExportAssetUrl(candidate.source)
+      if (this.isDownloadableExportAssetUrl(source)) {
+        return {
+          source,
+          mimeType: candidate.mimeType || undefined,
+        }
+      }
+    }
+
+    return null
+  }
+
+  private buildAssistantMediaAssetName(
+    media: HTMLMediaElement,
+    kind: ExportAsset["kind"],
+    source: string,
+  ): string {
+    const label =
+      media.getAttribute("aria-label") ||
+      media.getAttribute("title") ||
+      (kind === "video" ? "gemini-video" : "gemini-audio")
+    return this.ensureExportFilenameExtension(this.sanitizeGeminiExportFilename(label), source)
+  }
+
+  private buildAssistantDownloadAssetName(link: HTMLAnchorElement, source: string): string {
+    const downloadName = link.getAttribute("download")
+    const label =
+      downloadName ||
+      link.getAttribute("aria-label") ||
+      link.getAttribute("title") ||
+      link.textContent ||
+      "gemini-file"
+    return this.ensureExportFilenameExtension(this.sanitizeGeminiExportFilename(label), source)
+  }
+
+  private createExportAssetLinkElement(label: string, href: string): HTMLElement {
+    const paragraph = document.createElement("p")
+    const link = document.createElement("a")
+    link.setAttribute("href", href)
+    link.setAttribute(EXPORT_MARKDOWN_HREF_ATTR, href)
+    link.textContent = label
+    paragraph.appendChild(link)
+    return paragraph
+  }
+
+  private isAssistantExportDownloadLink(link: HTMLAnchorElement): boolean {
+    if (link.getAttribute("href")?.startsWith("assets/")) return false
+    if (link.hasAttribute("download")) return true
+
+    const signal = [
+      link.getAttribute("data-test-id") || "",
+      link.getAttribute("data-testid") || "",
+      link.getAttribute("aria-label") || "",
+      link.getAttribute("title") || "",
+      link.className || "",
+    ]
+      .join(" ")
+      .toLowerCase()
+
+    if (!/(download|attachment|file|document|audio|video|下载|下載)/i.test(signal)) {
+      return false
+    }
+
+    const source = this.normalizeExportAssetUrl(link.getAttribute("href") || link.href || "")
+    return this.isDownloadableExportAssetUrl(source)
+  }
+
+  private inferExportAssetKind(source: string, label: string): ExportAsset["kind"] {
+    const extension = (
+      this.getExportAssetExtension(source) ||
+      label.match(/\.([A-Za-z0-9]{1,10})$/)?.[1] ||
+      ""
+    ).toLowerCase()
+
+    if (["mp3", "m4a", "ogg", "wav"].includes(extension)) return "audio"
+    if (["mp4", "webm"].includes(extension)) return "video"
+    if (["md", "pdf", "txt", "csv", "json", "html", "htm"].includes(extension)) return "document"
+    return "file"
   }
 
   private isDecorativeExportImage(image: HTMLImageElement): boolean {
@@ -2755,6 +3438,10 @@ export class GeminiAdapter extends SiteAdapter {
     )
   }
 
+  private isGeminiConversationSharePage(): boolean {
+    return this.isSharePage() && document.querySelector(GEMINI_SHARE_TURN_SELECTOR) !== null
+  }
+
   private extractDeepResearchDocumentShareMessages(
     collector?: GeminiExportAssetCollector,
   ): ExportMessage[] {
@@ -2773,7 +3460,9 @@ export class GeminiAdapter extends SiteAdapter {
     return exportContent ? [{ role: "assistant", content: exportContent }] : []
   }
 
-  private extractDeepResearchAppMessages(collector?: GeminiExportAssetCollector): ExportMessage[] {
+  private async extractDeepResearchAppMessages(
+    collector?: GeminiExportAssetCollector,
+  ): Promise<ExportMessage[]> {
     const documentElement = this.getDeepResearchAppDocumentElement()
     if (this.hasDeepResearchAppDocumentTrigger() && !documentElement) {
       console.warn("[GeminiAdapter] Deep Research report panel is not available for export")
@@ -2788,20 +3477,23 @@ export class GeminiAdapter extends SiteAdapter {
       (left, right) => this.compareDomOrder(left, right),
     )
 
-    messageElements.forEach((element) => {
-      if (element.closest("immersive-panel")) return
+    for (const element of messageElements) {
+      if (element.closest("immersive-panel")) continue
 
       const role = element.tagName.toLowerCase() === "user-query" ? "user" : "assistant"
       const content =
         role === "user"
-          ? this.extractUserQueryExportContentWithAssets(element, collector).trim()
+          ? (collector
+              ? await this.extractUserQueryExportContentWithResolvedAssets(element, collector)
+              : this.extractUserQueryExportContentWithAssets(element)
+            ).trim()
           : this.extractDeepResearchAppAssistantResponseContent(element, collector).trim()
 
-      if (!content) return
+      if (!content) continue
 
       collectedElements.add(element)
       messages.push({ role, content })
-    })
+    }
 
     if (documentElement && !collectedElements.has(documentElement)) {
       const content = this.extractAssistantResponseTextWithAssets(documentElement, collector).trim()
@@ -2824,37 +3516,10 @@ export class GeminiAdapter extends SiteAdapter {
     return this.extractAssistantResponseTextWithAssets(markdown || element, collector)
   }
 
-  private extractDeepResearchConversationShareMessages(
+  private async extractDeepResearchConversationShareMessages(
     collector?: GeminiExportAssetCollector,
-  ): ExportMessage[] {
-    const messages: ExportMessage[] = []
-    const turns = Array.from(document.querySelectorAll(GEMINI_SHARE_TURN_SELECTOR))
-    const collectedElements = new Set<Element>()
-
-    turns.forEach((turn) => {
-      const turnMessages = [
-        ...Array.from(turn.querySelectorAll("user-query")).map((element) => ({
-          role: "user" as const,
-          element,
-        })),
-        ...Array.from(turn.querySelectorAll(GEMINI_DEEP_RESEARCH_MARKDOWN_SELECTOR)).map(
-          (element) => ({
-            role: "assistant" as const,
-            element,
-          }),
-        ),
-      ].sort((left, right) => this.compareDomOrder(left.element, right.element))
-
-      turnMessages.forEach(({ role, element }) => {
-        const content =
-          role === "user"
-            ? this.extractUserQueryExportContentWithAssets(element, collector).trim()
-            : this.extractAssistantResponseTextWithAssets(element, collector).trim()
-        if (!content) return
-        collectedElements.add(element)
-        messages.push({ role, content })
-      })
-    })
+  ): Promise<ExportMessage[]> {
+    const { messages, collectedElements } = await this.collectGeminiShareTurnMessages(collector)
 
     this.collectDetachedDeepResearchArtifactMessages(collectedElements, collector).forEach(
       (message) => {
@@ -2863,6 +3528,54 @@ export class GeminiAdapter extends SiteAdapter {
     )
 
     return this.dedupeAdjacentExportMessages(messages)
+  }
+
+  private async extractGeminiConversationShareMessages(
+    collector?: GeminiExportAssetCollector,
+  ): Promise<ExportMessage[]> {
+    return (await this.collectGeminiShareTurnMessages(collector)).messages
+  }
+
+  private async collectGeminiShareTurnMessages(collector?: GeminiExportAssetCollector): Promise<{
+    messages: ExportMessage[]
+    collectedElements: Set<Element>
+  }> {
+    const messages: ExportMessage[] = []
+    const collectedElements = new Set<Element>()
+    const turns = Array.from(document.querySelectorAll(GEMINI_SHARE_TURN_SELECTOR))
+
+    for (const turn of turns) {
+      const turnMessages = [
+        ...Array.from(turn.querySelectorAll("user-query")).map((element) => ({
+          role: "user" as const,
+          element,
+        })),
+        ...Array.from(turn.querySelectorAll(GEMINI_SHARE_ASSISTANT_MARKDOWN_SELECTOR)).map(
+          (element) => ({
+            role: "assistant" as const,
+            element,
+          }),
+        ),
+      ].sort((left, right) => this.compareDomOrder(left.element, right.element))
+
+      for (const { role, element } of turnMessages) {
+        const content =
+          role === "user"
+            ? (collector
+                ? await this.extractUserQueryExportContentWithResolvedAssets(element, collector)
+                : this.extractUserQueryExportContentWithAssets(element)
+              ).trim()
+            : this.extractAssistantResponseTextWithAssets(element, collector).trim()
+        if (!content) continue
+        collectedElements.add(element)
+        messages.push({ role, content })
+      }
+    }
+
+    return {
+      messages: this.dedupeAdjacentExportMessages(messages),
+      collectedElements,
+    }
   }
 
   private collectDetachedDeepResearchArtifactMessages(
@@ -2915,7 +3628,7 @@ export class GeminiAdapter extends SiteAdapter {
     }
 
     const name = this.buildDeepResearchReportFilename(titleText)
-    const path = this.createUniqueGeminiExportPath(`assets/documents/${name}`, collector)
+    const path = this.createUniqueGeminiExportPath(`assets/reports/${name}`, collector)
 
     collector.assets.push({
       id: `gemini-deep-research-report-${collector.assets.length + 1}`,

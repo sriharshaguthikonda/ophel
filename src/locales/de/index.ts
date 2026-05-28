@@ -1192,6 +1192,11 @@ Gib den Code und eine Zusammenfassung der Verbesserungen aus.`,
   exportIncludeThoughtsDesc:
     "Gedankengang beim Export einbeziehen und automatisch erweitern (als Zitatblöcke)",
   exportAttachmentsLabel: "Anhänge",
+  exportPackagingLabel: "Markdown-Exportmethode",
+  exportPackagingDesc:
+    "ZIP enthält die Markdown-Datei und herunterladbare Anhänge, speichert Anhänge in assets und referenziert sie relativ.",
+  exportPackagingMarkdown: "Markdown",
+  exportPackagingZip: "ZIP",
 
   // ======== Popup ========
   popupCurrentSite: "Aktuelle Seite",
