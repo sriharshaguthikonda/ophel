@@ -9,6 +9,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [1.0.55] - 2026-05-29
+
 ### 🚀 New Features
 
 - **ChatGPT Deep Research export** — ChatGPT Markdown zip exports now preserve uploaded images and linked files from user prompts, and include Deep Research reports as a title and link in Markdown. The extension build also allows `oaiusercontent.com` assets so shared-page images can be packaged. (#579)
@@ -1104,6 +1108,7 @@ This is the first official release of Ophel, providing comprehensive enhancement
 
 ---
 
+[1.0.55]: https://github.com/urzeye/ophel/releases/tag/v1.0.55
 [1.0.54]: https://github.com/urzeye/ophel/releases/tag/v1.0.54
 [1.0.53]: https://github.com/urzeye/ophel/releases/tag/v1.0.53
 [1.0.52]: https://github.com/urzeye/ophel/releases/tag/v1.0.52

@@ -8,6 +8,10 @@
 
 ## [Unreleased]
 
+---
+
+## [1.0.55] - 2026-05-29
+
 ### 🚀 新增功能
 
 - **ChatGPT Deep Research 导出** — ChatGPT Markdown zip 导出现在会保留用户提问中的上传图片和可链接文件，并将 Deep Research 报告以标题和链接形式写入 Markdown；扩展版同时补充 `oaiusercontent.com` 资源权限以支持分享页图片打包。(#579)
@@ -1104,6 +1108,7 @@
 
 ---
 
+[1.0.55]: https://github.com/urzeye/ophel/releases/tag/v1.0.55
 [1.0.54]: https://github.com/urzeye/ophel/releases/tag/v1.0.54
 [1.0.53]: https://github.com/urzeye/ophel/releases/tag/v1.0.53
 [1.0.52]: https://github.com/urzeye/ophel/releases/tag/v1.0.52
