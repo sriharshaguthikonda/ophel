@@ -8,6 +8,10 @@
 
 ## [Unreleased]
 
+---
+
+## [1.0.56] - 2026-06-02
+
 ### 🚀 新增功能
 
 - **AI Studio 用户附件导出** — AI Studio Markdown 导出现在会包含用户提问中的图片和文件；zip 附件包会把可下载的用户图片保存在 `assets/images/`，仅文件卡片则在 Markdown 中保留可见文件名和 token 信息。
@@ -1129,6 +1133,7 @@
 
 ---
 
+[1.0.56]: https://github.com/urzeye/ophel/releases/tag/v1.0.56
 [1.0.55]: https://github.com/urzeye/ophel/releases/tag/v1.0.55
 [1.0.54]: https://github.com/urzeye/ophel/releases/tag/v1.0.54
 [1.0.53]: https://github.com/urzeye/ophel/releases/tag/v1.0.53

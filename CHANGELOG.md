@@ -9,6 +9,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [1.0.56] - 2026-06-02
+
 ### 🚀 New Features
 
 - **AI Studio user attachments in exports** — AI Studio Markdown exports now include images and files from user prompts; zip packages preserve downloadable user images under `assets/images/`, while file-only cards keep their visible filename and token details in Markdown.
@@ -1129,6 +1133,7 @@ This is the first official release of Ophel, providing comprehensive enhancement
 
 ---
 
+[1.0.56]: https://github.com/urzeye/ophel/releases/tag/v1.0.56
 [1.0.55]: https://github.com/urzeye/ophel/releases/tag/v1.0.55
 [1.0.54]: https://github.com/urzeye/ophel/releases/tag/v1.0.54
 [1.0.53]: https://github.com/urzeye/ophel/releases/tag/v1.0.53
