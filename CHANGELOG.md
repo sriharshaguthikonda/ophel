@@ -12,6 +12,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 ### 🐛 Bug Fixes
 
 - **Claude theme mode sync** — Claude theme switching now keeps Claude-specific DOM hints inside the Claude adapter and avoids writing extra page-level `light` / `data-theme` / `color-scheme` markers that could diverge from Claude's native theme state.
+- **ChatGPT native TOC bookmark stability** — ChatGPT native TOC user-question bookmarks now keep the same identity across virtual-scroll state changes, reducing ghost bookmarks and duplicate matches for the same prompt.
 
 ---
 

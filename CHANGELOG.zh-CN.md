@@ -11,6 +11,7 @@
 ### 🐛 问题修复
 
 - **Claude 主题模式同步** — Claude 主题切换现在会把 Claude 专属 DOM 提示限制在 Claude 适配器内，并避免额外写入页面级 `light`、`data-theme`、`color-scheme` 标记，减少与 Claude 原生主题状态不一致导致的显示问题。
+- **ChatGPT 原生 TOC 收藏稳定性** — ChatGPT 原生 TOC 的用户提问收藏现在会在虚拟滚动状态变化时保持一致身份，减少同一提示词被识别成幽灵收藏或重复收藏的问题。
 
 ---
 
