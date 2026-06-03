@@ -140,6 +140,8 @@ const CHATGPT_EXPORT_USER_SELECTOR = `[${CHATGPT_EXPORT_ROOT_ATTR}="1"] [${CHATG
 const CHATGPT_EXPORT_ASSISTANT_SELECTOR = `[${CHATGPT_EXPORT_ROOT_ATTR}="1"] [${CHATGPT_EXPORT_ROLE_ATTR}="${CHATGPT_EXPORT_ROLE_ASSISTANT}"]`
 const CHATGPT_DEEP_RESEARCH_IFRAME_SELECTOR =
   'iframe[title="internal://deep-research"], iframe[src*="connector_openai_deep_research"]'
+const CHATGPT_NATIVE_TOC_ID_PREFIX = "chatgpt-native-user-query::"
+const CHATGPT_NATIVE_TOC_ID_RE = /^chatgpt-native-user-query::(\d+)::/
 
 interface ChatGPTExportMessageSnapshot {
   role: "user" | "assistant"
@@ -170,6 +172,19 @@ interface ChatGPTOutlineCacheEntry {
 interface ChatGPTTurnAnchor {
   element: Element
   index: number
+}
+
+interface ChatGPTNativeTocEntry {
+  index: number
+  text: string
+  button: HTMLElement
+  element: Element | null
+  isActive: boolean
+}
+
+interface ChatGPTOutlineSortEntry {
+  item: OutlineItem
+  order: number
 }
 
 export class ChatGPTAdapter extends SiteAdapter {
@@ -2177,6 +2192,312 @@ export class ChatGPTAdapter extends SiteAdapter {
 
   // ==================== 大纲缓存（虚拟滚动兜底） ====================
 
+  private normalizeNativeTocText(text: string): string {
+    return text.replace(/\s+/g, " ").trim()
+  }
+
+  private isCompatibleNativeTocText(source: string, target: string): boolean {
+    const normalizedSource = this.normalizeNativeTocText(source)
+    const normalizedTarget = this.normalizeNativeTocText(target)
+    if (!normalizedSource || !normalizedTarget) return false
+    if (normalizedSource === normalizedTarget) return true
+
+    const shorterLength = Math.min(normalizedSource.length, normalizedTarget.length)
+    if (shorterLength < 200) return false
+
+    return (
+      normalizedSource.startsWith(normalizedTarget) || normalizedTarget.startsWith(normalizedSource)
+    )
+  }
+
+  private isNativeTocOutlineId(id: string | undefined): boolean {
+    return Boolean(id?.startsWith(CHATGPT_NATIVE_TOC_ID_PREFIX))
+  }
+
+  private getNativeTocOutlineIndex(id: string | undefined): number | null {
+    const idMatch = (id || "").match(CHATGPT_NATIVE_TOC_ID_RE)
+    if (!idMatch?.[1]) return null
+
+    const index = Number.parseInt(idMatch[1], 10)
+    return Number.isNaN(index) ? null : index
+  }
+
+  private getNativeTocButtonIndex(button: HTMLElement, fallbackIndex: number): number {
+    const match = /^Prompt\s+(\d+)$/i.exec((button.getAttribute("aria-label") || "").trim())
+    if (!match?.[1]) return fallbackIndex
+
+    const parsed = Number.parseInt(match[1], 10)
+    return Number.isNaN(parsed) ? fallbackIndex : Math.max(0, parsed - 1)
+  }
+
+  private getNativeTocButtons(): HTMLElement[] {
+    const buttons = Array.from(document.querySelectorAll('button[aria-label^="Prompt "]')).filter(
+      (button): button is HTMLElement => {
+        if (!(button instanceof HTMLElement)) return false
+        const label = button.getAttribute("aria-label") || ""
+        if (!/^Prompt \d+$/i.test(label.trim())) return false
+
+        const rail = button.closest(".no-scrollbar")
+        return Boolean(rail?.querySelectorAll('button[aria-label^="Prompt "]').length)
+      },
+    )
+
+    return buttons.sort((left, right) => {
+      const leftIndex = Number.parseInt(
+        (left.getAttribute("aria-label") || "").replace(/\D+/g, ""),
+        10,
+      )
+      const rightIndex = Number.parseInt(
+        (right.getAttribute("aria-label") || "").replace(/\D+/g, ""),
+        10,
+      )
+      return (Number.isNaN(leftIndex) ? 0 : leftIndex) - (Number.isNaN(rightIndex) ? 0 : rightIndex)
+    })
+  }
+
+  private getNativeTocTexts(buttons: HTMLElement[]): string[] {
+    const firstButton = buttons[0]
+    const scope =
+      firstButton?.closest(".no-scrollbar")?.parentElement ||
+      firstButton?.closest(".relative.flex.items-start") ||
+      firstButton?.closest(".fixed")
+    const titleElements = scope
+      ? Array.from(
+          scope.querySelectorAll(
+            [
+              "button[data-fill] [title]",
+              'button[class*="__menu-item"] [title]',
+              "ul button [title]",
+              "[role='menu'] [title]",
+              ".absolute [title]",
+            ].join(", "),
+          ),
+        )
+      : []
+    const seen = new Set<Element>()
+    const uniqueTitleElements = titleElements.filter((element) => {
+      if (seen.has(element)) return false
+      seen.add(element)
+      return element instanceof HTMLElement
+    })
+
+    return uniqueTitleElements
+      .map((element) =>
+        this.normalizeNativeTocText(element.getAttribute("title") || element.textContent || ""),
+      )
+      .filter((text) => text.length > 0)
+  }
+
+  private getNativeTocEntries(): ChatGPTNativeTocEntry[] {
+    const buttons = this.getNativeTocButtons()
+    if (buttons.length === 0) return []
+
+    const texts = this.getNativeTocTexts(buttons)
+    if (texts.length !== buttons.length) return []
+
+    const textCounts = new Map<string, number>()
+    texts.forEach((text) => {
+      const normalized = this.normalizeNativeTocText(text)
+      textCounts.set(normalized, (textCounts.get(normalized) || 0) + 1)
+    })
+
+    const hasPrefixConflict = (text: string): boolean => {
+      const normalized = this.normalizeNativeTocText(text)
+      if (!normalized) return true
+
+      return texts.some((otherText) => {
+        const other = this.normalizeNativeTocText(otherText)
+        if (!other || other === normalized) return false
+        return normalized.startsWith(other) || other.startsWith(normalized)
+      })
+    }
+
+    const visibleUserQueriesByText = new Map<string, Element[]>()
+    Array.from(document.querySelectorAll(this.getUserQuerySelector())).forEach((element) => {
+      const normalized = this.normalizeNativeTocText(this.extractUserQueryText(element))
+      if (!normalized) return
+
+      const queries = visibleUserQueriesByText.get(normalized) || []
+      queries.push(element)
+      visibleUserQueriesByText.set(normalized, queries)
+    })
+
+    const entries: ChatGPTNativeTocEntry[] = []
+    buttons.forEach((button, fallbackIndex) => {
+      const text = texts[fallbackIndex]
+      if (!text) return
+      const normalizedText = this.normalizeNativeTocText(text)
+      const visibleCandidates = visibleUserQueriesByText.get(normalizedText) || []
+      const canBindElement =
+        textCounts.get(normalizedText) === 1 &&
+        !hasPrefixConflict(text) &&
+        visibleCandidates.length === 1
+
+      entries.push({
+        index: this.getNativeTocButtonIndex(button, fallbackIndex),
+        text,
+        button,
+        element: canBindElement ? visibleCandidates[0] : null,
+        isActive: button.hasAttribute("data-toc-active"),
+      })
+    })
+
+    return entries
+  }
+
+  private getNativeTocButtonEntryForIndex(index: number): ChatGPTNativeTocEntry | null {
+    const buttons = this.getNativeTocButtons()
+    const button = buttons.find(
+      (candidate, fallbackIndex) =>
+        this.getNativeTocButtonIndex(candidate, fallbackIndex) === index,
+    )
+    if (!button) return null
+
+    return {
+      index,
+      text: "",
+      button,
+      element: null,
+      isActive: button.hasAttribute("data-toc-active"),
+    }
+  }
+
+  private getActiveNativeTocIndex(): number | null {
+    const buttons = this.getNativeTocButtons()
+    const activeButton = buttons.find((button) => button.hasAttribute("data-toc-active"))
+    if (!activeButton) return null
+
+    const fallbackIndex = buttons.indexOf(activeButton)
+    return this.getNativeTocButtonIndex(activeButton, fallbackIndex)
+  }
+
+  private createNativeTocUserQueryOutlineItem(
+    entry: ChatGPTNativeTocEntry,
+    wordCount?: number,
+  ): OutlineItem {
+    let text = entry.element ? this.extractUserQueryText(entry.element) : entry.text
+    let isTruncated = false
+    if (text.length > 200) {
+      text = text.substring(0, 200)
+      isTruncated = true
+    }
+    const navigationId = `chatgpt-native-user-query::${entry.index}::${this.normalizeNativeTocText(entry.text)}`
+    const messageId = this.getChatGPTMessageId(entry.element)
+
+    return {
+      level: 0,
+      text,
+      element: entry.element,
+      isUserQuery: true,
+      isTruncated,
+      id: messageId || navigationId,
+      navigationId,
+      wordCount,
+    }
+  }
+
+  private resolveNativeTocEntryForOutlineItem(
+    item: Pick<OutlineItem, "id" | "navigationId">,
+  ): ChatGPTNativeTocEntry | null {
+    const index = this.getNativeTocOutlineIndex(item.navigationId || item.id)
+    if (index !== null) {
+      return this.getNativeTocButtonEntryForIndex(index)
+    }
+
+    return null
+  }
+
+  private async waitForNativeTocUserQuery(
+    entry: ChatGPTNativeTocEntry,
+    text: string,
+    timeoutMs = 1600,
+  ): Promise<Element | null> {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      await this.sleep(80)
+      const candidate = this.findNativeTocUserQueryCandidate(
+        text || entry.text,
+        this.getActiveNativeTocIndex() === entry.index,
+      )
+      if (candidate) return candidate
+    }
+
+    return null
+  }
+
+  private findNativeTocUserQueryCandidate(
+    text: string,
+    activeIndexMatched: boolean,
+  ): Element | null {
+    const container =
+      this.getScrollContainer() || document.querySelector(this.getResponseContainerSelector())
+    const candidates = Array.from(document.querySelectorAll(this.getUserQuerySelector())).filter(
+      (element) => this.isVisible(element) && this.isElementInViewport(element, container),
+    )
+
+    if (candidates.length === 0) return null
+
+    const textMatches = candidates.filter((element) =>
+      this.isCompatibleNativeTocText(this.extractUserQueryText(element), text),
+    )
+    if (textMatches.length === 0) return null
+
+    if (activeIndexMatched) {
+      return this.getClosestVisibleElementToViewportCenter(textMatches, container)
+    }
+
+    return textMatches.length === 1 ? textMatches[0] : null
+  }
+
+  private isElementInViewport(element: Element, container: Element | null): boolean {
+    const rect = element.getBoundingClientRect()
+    const viewportTop = container instanceof HTMLElement ? container.getBoundingClientRect().top : 0
+    const viewportBottom =
+      container instanceof HTMLElement
+        ? container.getBoundingClientRect().bottom
+        : window.innerHeight
+
+    return rect.bottom > viewportTop && rect.top < viewportBottom
+  }
+
+  private getClosestVisibleElementToViewportCenter(
+    elements: Element[],
+    container: Element | null,
+  ): Element | null {
+    const viewportRect = container instanceof HTMLElement ? container.getBoundingClientRect() : null
+    const viewportCenter = viewportRect
+      ? viewportRect.top + viewportRect.height / 2
+      : window.innerHeight / 2
+
+    return (
+      elements
+        .map((element) => {
+          const rect = element.getBoundingClientRect()
+          return {
+            element,
+            distance: Math.abs(rect.top + rect.height / 2 - viewportCenter),
+          }
+        })
+        .sort((left, right) => left.distance - right.distance)[0]?.element || null
+    )
+  }
+
+  private getElementRenderOrder(element: Element, container: Element): number {
+    const target = (
+      this.getChatGPTTurnId(element)
+        ? element.closest("[data-turn-id], [data-turn-id-container]") || element
+        : element
+    ) as HTMLElement
+    const targetRect = target.getBoundingClientRect()
+
+    if (container instanceof HTMLElement) {
+      const containerRect = container.getBoundingClientRect()
+      return container.scrollTop + (targetRect.top - containerRect.top)
+    }
+
+    return window.scrollY + targetRect.top
+  }
+
   private getOutlineCacheSessionKey(): string {
     const cid = this.getCurrentCid() || "default"
     const sessionId = this.getSessionId() || "default"
@@ -2213,6 +2534,16 @@ export class ChatGPTAdapter extends SiteAdapter {
     return (
       turnElement?.getAttribute("data-turn-id") ||
       turnElement?.getAttribute("data-turn-id-container") ||
+      null
+    )
+  }
+
+  private getChatGPTMessageId(element: Element | null): string | null {
+    if (!element) return null
+
+    return (
+      element.getAttribute("data-message-id") ||
+      element.closest("[data-message-id]")?.getAttribute("data-message-id") ||
       null
     )
   }
@@ -2279,6 +2610,7 @@ export class ChatGPTAdapter extends SiteAdapter {
 
     for (const item of outline) {
       if (!item.id) continue
+      if (this.isNativeTocOutlineId(item.id)) continue
 
       const turnId = this.getChatGPTTurnId(item.element)
       const orderKey = turnId || item.id
@@ -2311,16 +2643,20 @@ export class ChatGPTAdapter extends SiteAdapter {
     maxLevel: number,
     includeUserQueries: boolean,
     showWordCount: boolean,
+    hasNativeTocEntries = false,
   ): OutlineItem[] {
     if (this.outlineItemCache.size === 0) return outline
 
     const currentIds = new Set(outline.map((item) => item.id).filter((id): id is string => !!id))
+    const hasNativeTocUserQueries =
+      hasNativeTocEntries || outline.some((item) => this.isNativeTocOutlineId(item.id))
     let appended = 0
     const merged: OutlineItem[] = [...outline]
 
     for (const entry of this.outlineItemCache.values()) {
+      if (this.isNativeTocOutlineId(entry.id)) continue
       if (currentIds.has(entry.id)) continue
-      if (entry.isUserQuery && !includeUserQueries) continue
+      if (entry.isUserQuery && (!includeUserQueries || hasNativeTocUserQueries)) continue
       if (!entry.isUserQuery && entry.level > maxLevel) continue
       // 二次防御：缓存里若残留空文本条目（例如来自更早版本写入的脏数据），不要再回填到大纲
       if (!entry.text || !entry.text.trim()) continue
@@ -2343,11 +2679,13 @@ export class ChatGPTAdapter extends SiteAdapter {
       .map((item, originalIndex) => {
         const cached = item.id ? this.outlineItemCache.get(item.id) : undefined
         const turnId = cached?.turnId || this.getChatGPTTurnId(item.element)
-        const turnIndex = this.getTurnSortIndex(turnId, turnAnchors)
+        const nativeTocIndex = this.getNativeTocOutlineIndex(item.navigationId || item.id)
+        const turnIndex =
+          nativeTocIndex !== null ? nativeTocIndex * 2 : this.getTurnSortIndex(turnId, turnAnchors)
         return {
           item,
           originalIndex,
-          orderInTurn: cached?.orderInTurn ?? originalIndex,
+          orderInTurn: nativeTocIndex !== null ? 0 : cached?.orderInTurn ?? originalIndex,
           turnIndex,
         }
       })
@@ -2447,9 +2785,22 @@ export class ChatGPTAdapter extends SiteAdapter {
   }
 
   async resolveOutlineTarget(
-    item: Pick<OutlineItem, "level" | "text" | "isUserQuery" | "id">,
+    item: Pick<OutlineItem, "level" | "text" | "isUserQuery" | "id" | "navigationId">,
     queryIndex?: number,
   ): Promise<Element | null> {
+    if (item.isUserQuery && item.level === 0) {
+      const nativeTocEntry = this.resolveNativeTocEntryForOutlineItem(item)
+      if (nativeTocEntry) {
+        if (nativeTocEntry.element) return nativeTocEntry.element
+
+        nativeTocEntry.button.scrollIntoView({ block: "nearest", inline: "nearest" })
+        nativeTocEntry.button.click()
+
+        const resolvedTarget = await this.waitForNativeTocUserQuery(nativeTocEntry, item.text)
+        if (resolvedTarget) return resolvedTarget
+      }
+    }
+
     const cachedTarget = this.resolveCachedChatGPTOutlineTarget(item.id)
     if (cachedTarget) {
       // 若拿到的是 turn-shell 而非真实消息节点，主动滚动让 ChatGPT 重新挂载真实内容，
@@ -2496,20 +2847,11 @@ export class ChatGPTAdapter extends SiteAdapter {
   }
 
   extractOutline(maxLevel = 6, includeUserQueries = false, showWordCount = false): OutlineItem[] {
-    const outline: OutlineItem[] = []
+    let outline: OutlineItem[] = []
     const container = document.querySelector(this.getResponseContainerSelector())
     if (!container) return outline
 
     this.ensureOutlineCacheSession()
-
-    // 辅助函数：查找最近的消息容器并获取 message-id
-    const getMessageId = (el: Element): string | null => {
-      const msgContainer = el.closest("[data-message-id]")
-      if (msgContainer) {
-        return msgContainer.getAttribute("data-message-id")
-      }
-      return null
-    }
 
     // 辅助函数：生成标题的稳定 ID
     // 格式: msgId::h2-标题文本-0
@@ -2624,6 +2966,8 @@ export class ChatGPTAdapter extends SiteAdapter {
     // 获取所有潜在的节点（按文档顺序）
     const allElements = Array.from(container.querySelectorAll(combinedSelector))
 
+    const nativeTocEntries = includeUserQueries ? this.getNativeTocEntries() : []
+
     allElements.forEach((element, index) => {
       const tagName = element.tagName.toLowerCase()
       const isUserQuery = element.matches(userQuerySelector)
@@ -2673,7 +3017,7 @@ export class ChatGPTAdapter extends SiteAdapter {
         }
 
         // 添加 ID
-        const msgId = getMessageId(element)
+        const msgId = this.getChatGPTMessageId(element)
         if (msgId) {
           if (isUserQuery) {
             item.id = msgId
@@ -2717,6 +3061,78 @@ export class ChatGPTAdapter extends SiteAdapter {
       }
     })
 
+    if (nativeTocEntries.length > 0) {
+      const sortedEntries: ChatGPTOutlineSortEntry[] = []
+      const lastNativeTocIndex = nativeTocEntries.reduce(
+        (maxIndex, entry) => Math.max(maxIndex, entry.index),
+        -1,
+      )
+      const calculateNativeTocWordCount = (entry: ChatGPTNativeTocEntry): number | undefined => {
+        if (!showWordCount || !entry.element) return undefined
+
+        const nextEntry = nativeTocEntries.find((candidate) => candidate.index > entry.index)
+        if (nextEntry?.element) {
+          return calculateWordCount(entry.element, nextEntry.element, true)
+        }
+
+        if (!nextEntry && entry.index === lastNativeTocIndex) {
+          return calculateWordCount(entry.element, null, true)
+        }
+
+        return undefined
+      }
+      const visibleUserAnchors = nativeTocEntries
+        .filter((entry): entry is ChatGPTNativeTocEntry & { element: Element } =>
+          Boolean(entry.element),
+        )
+        .map((entry) => ({
+          index: entry.index,
+          renderOrder: this.getElementRenderOrder(entry.element, container),
+        }))
+        .sort((left, right) => left.renderOrder - right.renderOrder)
+
+      const activeTocEntry = nativeTocEntries.find((entry) => entry.isActive)
+      const estimateUserOrderForElement = (element: Element): number => {
+        const elementOrder = this.getElementRenderOrder(element, container)
+        let previousAnchor: { index: number; renderOrder: number } | undefined
+        let nextAnchor: { index: number; renderOrder: number } | undefined
+
+        for (const anchor of visibleUserAnchors) {
+          if (anchor.renderOrder <= elementOrder) {
+            previousAnchor = anchor
+          } else {
+            nextAnchor = anchor
+            break
+          }
+        }
+
+        if (previousAnchor) return previousAnchor.index
+        if (nextAnchor) return Math.max(0, nextAnchor.index - 1)
+        return activeTocEntry?.index ?? 0
+      }
+
+      nativeTocEntries.forEach((entry) => {
+        sortedEntries.push({
+          item: this.createNativeTocUserQueryOutlineItem(entry, calculateNativeTocWordCount(entry)),
+          order: entry.index * 100000,
+        })
+      })
+
+      outline
+        .filter((item) => !item.isUserQuery)
+        .forEach((item, index) => {
+          const orderBase = item.element ? estimateUserOrderForElement(item.element) : 0
+          sortedEntries.push({
+            item,
+            order: orderBase * 100000 + 50000 + index,
+          })
+        })
+
+      outline = sortedEntries
+        .sort((left, right) => left.order - right.order)
+        .map(({ item }) => item)
+    }
+
     const turnAnchors = this.getOrderedChatGPTTurnAnchors(container)
 
     // SPA 切换过渡期：跳过 cache 写入与合并，仅返回当前 DOM 真实可见的内容。
@@ -2738,6 +3154,7 @@ export class ChatGPTAdapter extends SiteAdapter {
       maxLevel,
       includeUserQueries,
       showWordCount,
+      nativeTocEntries.length > 0,
     )
   }
 
