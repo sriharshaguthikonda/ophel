@@ -8,6 +8,10 @@
 
 ## [Unreleased]
 
+---
+
+## [1.0.57] - 2026-06-03
+
 ### 🐛 问题修复
 
 - **Claude 主题模式同步** — Claude 主题切换现在会把 Claude 专属 DOM 提示限制在 Claude 适配器内，并避免额外写入页面级 `light`、`data-theme`、`color-scheme` 标记，减少与 Claude 原生主题状态不一致导致的显示问题。
@@ -1138,6 +1142,7 @@
 
 ---
 
+[1.0.57]: https://github.com/urzeye/ophel/releases/tag/v1.0.57
 [1.0.56]: https://github.com/urzeye/ophel/releases/tag/v1.0.56
 [1.0.55]: https://github.com/urzeye/ophel/releases/tag/v1.0.55
 [1.0.54]: https://github.com/urzeye/ophel/releases/tag/v1.0.54

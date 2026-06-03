@@ -9,6 +9,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [1.0.57] - 2026-06-03
+
 ### 🐛 Bug Fixes
 
 - **Claude theme mode sync** — Claude theme switching now keeps Claude-specific DOM hints inside the Claude adapter and avoids writing extra page-level `light` / `data-theme` / `color-scheme` markers that could diverge from Claude's native theme state.
@@ -1138,6 +1142,7 @@ This is the first official release of Ophel, providing comprehensive enhancement
 
 ---
 
+[1.0.57]: https://github.com/urzeye/ophel/releases/tag/v1.0.57
 [1.0.56]: https://github.com/urzeye/ophel/releases/tag/v1.0.56
 [1.0.55]: https://github.com/urzeye/ophel/releases/tag/v1.0.55
 [1.0.54]: https://github.com/urzeye/ophel/releases/tag/v1.0.54
