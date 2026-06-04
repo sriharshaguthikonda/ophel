@@ -102,9 +102,11 @@ jobs:
             echo "See CHANGELOG.md for details." > RELEASE_NOTE_EN.md
           fi
 
-          # Compute GitHub anchor for Chinese changelog heading (e.g. 1.0.47 → 1047)
-          VERSION_ANCHOR=$(echo "$VERSION_NO_V" | tr -d '.')
-          ZH_CHANGELOG_URL="https://github.com/urzeye/ophel/blob/main/CHANGELOG.zh-CN.md#${VERSION_ANCHOR}"
+          # Compute GitHub anchors from the actual changelog headings.
+          EN_VERSION_ANCHOR=$(node scripts/github-changelog-anchor.mjs CHANGELOG.md "$VERSION_NO_V")
+          ZH_VERSION_ANCHOR=$(node scripts/github-changelog-anchor.mjs CHANGELOG.zh-CN.md "$VERSION_NO_V")
+          EN_CHANGELOG_URL="https://github.com/urzeye/ophel/blob/main/CHANGELOG.md#${EN_VERSION_ANCHOR}"
+          ZH_CHANGELOG_URL="https://github.com/urzeye/ophel/blob/main/CHANGELOG.zh-CN.md#${ZH_VERSION_ANCHOR}"
 
           # Combine: Chinese link on top, then English content
           {
@@ -120,6 +122,8 @@ jobs:
           echo "notes<<EOF" >> $GITHUB_OUTPUT
           cat RELEASE_NOTE.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+          echo "en_changelog_url=${EN_CHANGELOG_URL}" >> $GITHUB_OUTPUT
+          echo "zh_changelog_url=${ZH_CHANGELOG_URL}" >> $GITHUB_OUTPUT
 
       - name: Package for Chrome Web Store
         run: |
@@ -217,7 +221,7 @@ jobs:
 
             [Full Changelog](https://github.com/urzeye/ophel/compare/${{ steps.get_version.outputs.PREV_VERSION }}...${{ steps.get_version.outputs.VERSION }})
 
-            *Changelog: [CHANGELOG.md](https://github.com/urzeye/ophel/blob/main/CHANGELOG.md) · [中文版 CHANGELOG.zh-CN.md](https://github.com/urzeye/ophel/blob/main/CHANGELOG.zh-CN.md)*
+            *Changelog: [CHANGELOG.md](${{ steps.extract_changelog.outputs.en_changelog_url }}) · [中文版 CHANGELOG.zh-CN.md](${{ steps.extract_changelog.outputs.zh_changelog_url }})*
           files: |
             build/ophel-atlas-${{ steps.get_version.outputs.VERSION }}-chrome.zip
             build/ophel-atlas-${{ steps.get_version.outputs.VERSION }}-edge-addons-upload.zip
