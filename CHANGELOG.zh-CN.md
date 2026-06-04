@@ -8,6 +8,10 @@
 
 ## [Unreleased]
 
+---
+
+## [1.0.58] - 2026-06-04
+
 ### 🐛 问题修复
 
 - **对话标题隔离** — 浏览器标签页重命名现在会把 Ophel 管理的状态、模型标签与原始对话标题隔离，避免页面取不到模型名时把标签页状态、模型名或反复追加的 `->` 分隔符带入导出的对话标题和文件名。
@@ -1153,6 +1157,7 @@
 
 ---
 
+[1.0.58]: https://github.com/urzeye/ophel/releases/tag/v1.0.58
 [1.0.57]: https://github.com/urzeye/ophel/releases/tag/v1.0.57
 [1.0.56]: https://github.com/urzeye/ophel/releases/tag/v1.0.56
 [1.0.55]: https://github.com/urzeye/ophel/releases/tag/v1.0.55

@@ -9,6 +9,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [1.0.58] - 2026-06-04
+
 ### 🐛 Bug Fixes
 
 - **Conversation title isolation** — Browser tab renaming now keeps Ophel-managed status/model labels separate from raw conversation titles, preventing exported conversation titles and filenames from inheriting tab status, model names, or repeated `->` separators when a page cannot expose its model name.
@@ -1153,6 +1157,7 @@ This is the first official release of Ophel, providing comprehensive enhancement
 
 ---
 
+[1.0.58]: https://github.com/urzeye/ophel/releases/tag/v1.0.58
 [1.0.57]: https://github.com/urzeye/ophel/releases/tag/v1.0.57
 [1.0.56]: https://github.com/urzeye/ophel/releases/tag/v1.0.56
 [1.0.55]: https://github.com/urzeye/ophel/releases/tag/v1.0.55
