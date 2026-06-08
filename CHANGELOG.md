@@ -9,6 +9,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### 🐛 Bug Fixes
+
+- **Gemini watermark removal** — Replaced the legacy Gemini/Nano Banana remover with the SDK-backed implementation and fixed user-uploaded image handling plus generated-image removal regressions. (#593, #625)
+
 ---
 
 ## [1.0.58] - 2026-06-04
