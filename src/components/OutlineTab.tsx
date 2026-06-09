@@ -9,6 +9,7 @@ import {
   ClearIcon,
   CollapseAllIcon,
   CopyIcon,
+  CopyOutlineIcon,
   ExpandAllIcon,
   LocateIcon,
   OutlineDocumentIcon,
@@ -18,15 +19,21 @@ import {
   UserQueryIcon,
 } from "~components/icons"
 import { Tooltip } from "~components/ui/Tooltip"
+import type { ConversationManager } from "~core/conversation-manager"
 import type { OutlineManager, OutlineNode } from "~core/outline-manager"
 import type { OutlineSource } from "~adapters/base"
 import { useSettingsStore } from "~stores/settings-store"
+import {
+  createOutlineTextFromExportMessages,
+  createOutlineTextFromOutlineTree,
+} from "~utils/export-outline"
 import { t, getCurrentLang } from "~utils/i18n"
 import { formatWordCount } from "~utils/format"
 import { showToast } from "~utils/toast"
 
 interface OutlineTabProps {
   manager: OutlineManager
+  conversationManager: ConversationManager
   onJumpBefore?: () => void
   isCodexOpen?: boolean
 }
@@ -50,6 +57,30 @@ const getOutlineSourceLabel = (source: OutlineSource): string => {
     return t("outlineSourceDocument")
   }
   return source.label
+}
+
+const writeClipboardText = async (text: string): Promise<void> => {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+
+  const textArea = document.createElement("textarea")
+  textArea.value = text
+  textArea.style.position = "fixed"
+  textArea.style.left = "-9999px"
+  textArea.style.top = "0"
+  document.body.appendChild(textArea)
+  textArea.select()
+
+  try {
+    const copied = document.execCommand("copy")
+    if (!copied) {
+      throw new Error("execCommand copy returned false")
+    }
+  } finally {
+    textArea.remove()
+  }
 }
 
 const buildVisibilityMaps = (
@@ -161,6 +192,9 @@ const buildVisibilityMaps = (
 
   return { parentMap, visibleMap }
 }
+
+const getConversationCopyHeadingLevel = (expandLevel: number, showUserQueries: boolean): number =>
+  showUserQueries ? expandLevel : Math.max(1, expandLevel)
 
 // 递归渲染大纲树节点
 // 使用 outline-hidden 类而非条件渲染
@@ -398,6 +432,7 @@ const OutlineNodeView: React.FC<{
 
 export const OutlineTab: React.FC<OutlineTabProps> = ({
   manager,
+  conversationManager,
   onJumpBefore,
   isCodexOpen = false,
 }) => {
@@ -430,6 +465,8 @@ export const OutlineTab: React.FC<OutlineTabProps> = ({
   const [bookmarkMode, setBookmarkMode] = useState(initialState.bookmarkMode)
   const [outlineSources, setOutlineSources] = useState<OutlineSource[]>(initialState.sources)
   const [activeSourceId, setActiveSourceId] = useState(initialState.activeSourceId)
+  const [isCopyingFullOutline, setIsCopyingFullOutline] = useState(false)
+  const [fullOutlineCopySuccess, setFullOutlineCopySuccess] = useState(false)
 
   // const { bookmarks } = useBookmarkStore() // Removed unused bookmarks
 
@@ -994,6 +1031,56 @@ export const OutlineTab: React.FC<OutlineTabProps> = ({
     navigator.clipboard.writeText(text)
   }, [])
 
+  const handleCopyFullOutline = useCallback(async () => {
+    if (isCopyingFullOutline) return
+
+    setIsCopyingFullOutline(true)
+    try {
+      let result: ReturnType<typeof createOutlineTextFromExportMessages>
+
+      if (activeSourceId === "conversation") {
+        const messages = await conversationManager.collectCurrentConversationExportMessages()
+        if (!messages || messages.length === 0) {
+          showToast(t("outlineEmpty"))
+          return
+        }
+
+        result = createOutlineTextFromExportMessages(messages, {
+          includeUserQueries: showUserQueries,
+          maxHeadingLevel: getConversationCopyHeadingLevel(expandLevel, showUserQueries),
+        })
+      } else {
+        result = createOutlineTextFromOutlineTree(tree, {
+          includeUserQueries: showUserQueries,
+          isIncluded: (node) => visibleMap[node.index ?? -1] ?? true,
+        })
+      }
+
+      if (!result.text) {
+        showToast(t("outlineEmpty"))
+        return
+      }
+
+      await writeClipboardText(result.text)
+      setFullOutlineCopySuccess(true)
+      showToast(t("outlineFullCopySuccess").replace("{count}", String(result.count)))
+      window.setTimeout(() => setFullOutlineCopySuccess(false), 1500)
+    } catch (error) {
+      console.error("[OutlineTab] Failed to copy outline:", error)
+      showToast(t("copyFailed"))
+    } finally {
+      setIsCopyingFullOutline(false)
+    }
+  }, [
+    activeSourceId,
+    conversationManager,
+    expandLevel,
+    isCopyingFullOutline,
+    showUserQueries,
+    tree,
+    visibleMap,
+  ])
+
   // 用于提取完整用户提问文本（当显示被截断时）
   const extractUserQueryText = useCallback(
     (element: Element): string => manager.extractUserQueryText(element),
@@ -1243,6 +1330,34 @@ export const OutlineTab: React.FC<OutlineTabProps> = ({
                   justifyContent: "center",
                 }}>
                 {isAllExpanded ? <CollapseAllIcon size={16} /> : <ExpandAllIcon size={16} />}
+              </button>
+            </Tooltip>
+
+            {/* Copy Outline */}
+            <Tooltip
+              content={isCopyingFullOutline ? t("outlineCopyFullRunning") : t("outlineCopyFull")}>
+              <button
+                onClick={handleCopyFullOutline}
+                disabled={isCopyingFullOutline}
+                style={{
+                  width: "26px",
+                  height: "26px",
+                  padding: 0,
+                  border: "1px solid var(--gh-input-border, #d1d5db)",
+                  borderRadius: "4px",
+                  backgroundColor: "var(--gh-bg, #fff)",
+                  color: "var(--gh-text, #374151)",
+                  cursor: isCopyingFullOutline ? "wait" : "pointer",
+                  opacity: isCopyingFullOutline ? 0.65 : 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}>
+                {fullOutlineCopySuccess ? (
+                  <CheckIcon size={14} color="#10b981" />
+                ) : (
+                  <CopyOutlineIcon size={15} />
+                )}
               </button>
             </Tooltip>
 

@@ -560,6 +560,9 @@ export const ru = {
   outlineEmptyDescDefault: "Пункты содержания появятся автоматически по мере развития диалога.",
   outlineEmptyDescUserQueryOnly:
     "Сейчас отображаются только вопросы пользователя. Отправьте сообщение, чтобы появились пункты содержания.",
+  outlineCopyFull: "Копировать план",
+  outlineCopyFullRunning: "Копирование плана...",
+  outlineFullCopySuccess: "Скопировано пунктов плана: {count}",
   outlineRefresh: "Перезагрузить",
   outlineSettings: "Настройки содержания",
   bookmarkSettings: "Настройки закладок",
@@ -1074,6 +1077,13 @@ export const ru = {
   exportOverlayCopying: "Копируем Markdown...",
   exportOverlayRestoring: "Восстанавливаем страницу...",
   exportOverlayHint: "Во время экспорта не нажимайте, не прокручивайте и не вводите текст.",
+  outlineCopyOverlayLoadingHistory: "Загружаем весь диалог...",
+  outlineCopyOverlayPreparing: "Готовим план...",
+  outlineCopyOverlayExtracting: "Извлекаем план...",
+  outlineCopyOverlayCopying: "Копируем план...",
+  outlineCopyOverlayRestoring: "Восстанавливаем позицию страницы...",
+  outlineCopyOverlayHint:
+    "Во время копирования плана не нажимайте, не прокручивайте и не вводите текст.",
   replyCopied: "Ответ скопирован",
   noReplyToCopy: "Нечего копить",
   scrollLockToggled: "Скролл изменен",

@@ -575,6 +575,9 @@ export const ja = {
   outlineEmptyDescDefault: "会話が進むと目次項目が自動で表示されます。",
   outlineEmptyDescUserQueryOnly:
     "現在はユーザーの質問のみ表示中です。メッセージ送信後に目次項目が表示されます。",
+  outlineCopyFull: "目次をコピー",
+  outlineCopyFullRunning: "目次をコピー中...",
+  outlineFullCopySuccess: "{count} 件の目次項目をコピーしました",
   outlineRefresh: "リロード",
   outlineSettings: "目次設定",
   outlineSettingsTitle: "アウトライン設定",
@@ -1123,6 +1126,13 @@ export const ja = {
   exportOverlayRestoring: "ページ状態を復元しています...",
   exportOverlayHint:
     "エクスポート中はページを動かさず、クリック・スクロール・入力をしないでください。",
+  outlineCopyOverlayLoadingHistory: "会話全体を読み込んでいます...",
+  outlineCopyOverlayPreparing: "目次を準備しています...",
+  outlineCopyOverlayExtracting: "目次を抽出しています...",
+  outlineCopyOverlayCopying: "目次をコピーしています...",
+  outlineCopyOverlayRestoring: "ページ位置を復元しています...",
+  outlineCopyOverlayHint:
+    "目次のコピー中はページを動かさず、クリック・スクロール・入力をしないでください。",
   replyCopied: "最新の回答をコピーしました",
   noReplyToCopy: "コピーできる回答がありません",
   scrollLockToggled: "スクロールロックを切り替えました",
