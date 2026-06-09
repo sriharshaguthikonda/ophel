@@ -583,6 +583,7 @@ export const ja = {
   outlineSettingsTitle: "アウトライン設定",
   outlineEnabledLabel: "アウトライン表示を有効化",
   outlineShowUserQueriesLabel: "ユーザーの質問を表示",
+  outlineUserQueryRoleLabel: "ユーザーの質問",
 
   bookmarkSettings: "ブックマーク設定",
   bookmarkModeDisableLevel: "ブックマークモードではレベルを調整できません",
@@ -603,8 +604,8 @@ export const ja = {
   anchorUpdated: "アンカーを更新しました",
 
   // Outline advanced toolbar
-  outlineScrollBottom: "一番下へ",
-  outlineScrollTop: "一番上へ",
+  outlineScrollBottom: "アウトラインの一番下へ",
+  outlineScrollTop: "アウトラインの一番上へ",
   outlineExpandAll: "すべて展開",
   outlineCollapseAll: "すべて折りたたむ",
   outlineLocateCurrent: "現在の位置を特定",
@@ -633,7 +634,6 @@ export const ja = {
   outlineUpdateIntervalLabel: "更新間隔 (秒)",
   outlineShowUserQueries: "ユーザーの発言を含める",
   outlineShowUserQueriesTooltip: "ユーザーの質問を見出しとして表示",
-  outlineOnlyUserQueries: "質問のみ",
   globalSearchOutlineReplies: "回答",
   outlineIntervalUpdated: "間隔を {val} 秒に設定しました",
   outlineSyncScrollLabel: "スクロール同期",

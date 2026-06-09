@@ -597,6 +597,7 @@ export const en = {
   outlineSettingsTitle: "Outline Settings",
   outlineEnabledLabel: "Enable Outline View",
   outlineShowUserQueriesLabel: "Show User Queries",
+  outlineUserQueryRoleLabel: "User queries",
   bookmarkSettings: "Bookmark Settings",
 
   bookmarkModeDisableLevel: "Cannot adjust levels in bookmark mode",
@@ -617,8 +618,8 @@ export const en = {
   anchorUpdated: "Anchor updated",
   // Outline advanced toolbar
 
-  outlineScrollBottom: "Scroll to bottom",
-  outlineScrollTop: "Scroll to top",
+  outlineScrollBottom: "Scroll to outline bottom",
+  outlineScrollTop: "Scroll to outline top",
   outlineExpandAll: "Expand all",
   outlineCollapseAll: "Collapse all",
   outlineLocateCurrent: "Locate current position",
@@ -659,7 +660,6 @@ export const en = {
   outlineUpdateIntervalLabel: "Update interval (seconds)",
   outlineShowUserQueries: "Show user queries",
   outlineShowUserQueriesTooltip: "Show user queries",
-  outlineOnlyUserQueries: "Queries",
   globalSearchOutlineReplies: "Replies",
   outlineIntervalUpdated: "Interval set to {val} seconds",
   outlineSyncScrollLabel: "Sync scroll",
