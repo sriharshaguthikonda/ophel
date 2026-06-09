@@ -8,6 +8,10 @@
 
 ## [Unreleased]
 
+---
+
+## [1.0.59] - 2026-06-10
+
 ### 🚀 新增功能
 
 - **大纲复制** — 大纲工具栏现在可以复用导出流程，将当前选择层级的大纲复制为 Markdown 标题；虚拟滚动会话会先加载完整内容并在结束后恢复页面位置，再复制标题与用户提问。(#539)
@@ -1171,6 +1175,7 @@
 
 ---
 
+[1.0.59]: https://github.com/urzeye/ophel/releases/tag/v1.0.59
 [1.0.58]: https://github.com/urzeye/ophel/releases/tag/v1.0.58
 [1.0.57]: https://github.com/urzeye/ophel/releases/tag/v1.0.57
 [1.0.56]: https://github.com/urzeye/ophel/releases/tag/v1.0.56

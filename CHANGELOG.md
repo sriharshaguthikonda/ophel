@@ -9,6 +9,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [1.0.59] - 2026-06-10
+
 ### 🚀 New Features
 
 - **Outline copy** — The Outline toolbar can now copy the currently selected outline depth as Markdown headings by reusing the export pipeline, so virtual-scroll conversations are loaded and restored safely before headings and user queries are copied. (#539)
@@ -1171,6 +1175,7 @@ This is the first official release of Ophel, providing comprehensive enhancement
 
 ---
 
+[1.0.59]: https://github.com/urzeye/ophel/releases/tag/v1.0.59
 [1.0.58]: https://github.com/urzeye/ophel/releases/tag/v1.0.58
 [1.0.57]: https://github.com/urzeye/ophel/releases/tag/v1.0.57
 [1.0.56]: https://github.com/urzeye/ophel/releases/tag/v1.0.56
