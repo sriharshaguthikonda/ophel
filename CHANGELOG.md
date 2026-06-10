@@ -13,6 +13,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 - **Userscript bundle size** — Split Markdown rendering code, Markdown styles, user-query Markdown styles, and site icons into external userscript assets so Greasy Fork sync has less inline code to process while preserving the existing rendering injection path.
 
+### 🐛 Bug Fixes
+
+- **Conversation sync loading** — Conversation sync now uses each adapter's own conversation source to decide when sidebar history has finished loading, waits longer for slow lazy-loaded sidebars, and disables sync-delete when a complete load cannot be confirmed. Doubao and Yuanbao now share the safer base loader. (#639)
+
 ---
 
 ## [1.0.59] - 2026-06-10
