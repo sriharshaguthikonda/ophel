@@ -9,6 +9,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [1.0.60] - 2026-06-10
+
 ### ✨ Improvements
 
 - **Userscript bundle size** — Split Markdown rendering code, Markdown styles, user-query Markdown styles, and site icons into external userscript assets so Greasy Fork sync has less inline code to process while preserving the existing rendering injection path.
@@ -1186,6 +1190,7 @@ This is the first official release of Ophel, providing comprehensive enhancement
 
 ---
 
+[1.0.60]: https://github.com/urzeye/ophel/releases/tag/v1.0.60
 [1.0.59]: https://github.com/urzeye/ophel/releases/tag/v1.0.59
 [1.0.58]: https://github.com/urzeye/ophel/releases/tag/v1.0.58
 [1.0.57]: https://github.com/urzeye/ophel/releases/tag/v1.0.57

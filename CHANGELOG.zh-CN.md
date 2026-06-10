@@ -8,6 +8,10 @@
 
 ## [Unreleased]
 
+---
+
+## [1.0.60] - 2026-06-10
+
 ### ✨ 功能优化
 
 - **油猴脚本包体积** — 将 Markdown 渲染代码、Markdown 样式、用户提问 Markdown 样式和站点图标拆分为外部油猴资源，减少 Greasy Fork 同步时需要处理的内联代码，同时保持原有渲染注入路径不变。
@@ -1186,6 +1190,7 @@
 
 ---
 
+[1.0.60]: https://github.com/urzeye/ophel/releases/tag/v1.0.60
 [1.0.59]: https://github.com/urzeye/ophel/releases/tag/v1.0.59
 [1.0.58]: https://github.com/urzeye/ophel/releases/tag/v1.0.58
 [1.0.57]: https://github.com/urzeye/ophel/releases/tag/v1.0.57
