@@ -75,6 +75,13 @@ export const QueueOverlay: React.FC<QueueOverlayProps> = ({ adapter, dispatcher 
   const shortcuts = useSettingsStore((state) => state.settings?.shortcuts)
   const queueBinding = shortcuts?.keybindings?.togglePromptQueue
 
+  const submitKeyDisplay = React.useMemo(() => {
+    if (submitShortcut === "ctrlEnter") {
+      return "Ctrl+Enter"
+    }
+    return "Enter"
+  }, [submitShortcut])
+
   const shortcutText = React.useMemo(() => {
     if (queueBinding === null) return ""
     const isMac = navigator.userAgent.toLowerCase().includes("mac")
@@ -319,20 +326,41 @@ export const QueueOverlay: React.FC<QueueOverlayProps> = ({ adapter, dispatcher 
     }
   }, [inputValue, isGenerating, store, dispatcher, submitShortcut])
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  // 队列输入框键盘事件处理（使用捕获阶段，避免被 Guard 拦截）
+  useEffect(() => {
+    const textarea = inputRef.current
+    if (!textarea || !isExpanded) return
+
+    const handleKeyDownCapture = (e: KeyboardEvent) => {
       if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault()
-        e.stopPropagation()
-        handleSubmit()
+        // 根据 submitShortcut 设置判断是否应该发送
+        const needsModifier = submitShortcut === "ctrlEnter"
+        const hasModifier = e.ctrlKey
+
+        // submitShortcut 为 "enter" 时：仅 Enter 发送，Ctrl+Enter 换行
+        // submitShortcut 为 "ctrlEnter" 时：仅 Ctrl+Enter 发送，Enter 换行
+        const shouldSubmit = needsModifier ? hasModifier : !hasModifier
+
+        if (shouldSubmit) {
+          e.preventDefault()
+          e.stopPropagation()
+          handleSubmit()
+        }
+        // 如果不应该发送，让 Enter 正常换行（不 preventDefault）
       }
       if (e.key === "Escape") {
         e.stopPropagation()
         setIsExpanded(false)
       }
-    },
-    [handleSubmit],
-  )
+    }
+
+    // 使用捕获阶段，在 Guard 之前处理
+    textarea.addEventListener("keydown", handleKeyDownCapture, true)
+
+    return () => {
+      textarea.removeEventListener("keydown", handleKeyDownCapture, true)
+    }
+  }, [isExpanded, submitShortcut, handleSubmit])
 
   const handleRemoveItem = useCallback(
     (id: string) => {
@@ -549,7 +577,9 @@ export const QueueOverlay: React.FC<QueueOverlayProps> = ({ adapter, dispatcher 
           {/* 队列列表 */}
           <div className="gh-queue-list">
             {items.filter((i) => i.status === "pending" || i.status === "sending").length === 0 ? (
-              <div className="gh-queue-empty">{t("queueEmpty")}</div>
+              <div className="gh-queue-empty">
+                队列为空，输入内容后按 {submitKeyDisplay} 发送或排队
+              </div>
             ) : (
               items
                 .filter((i) => i.status === "pending" || i.status === "sending")
@@ -702,15 +732,18 @@ export const QueueOverlay: React.FC<QueueOverlayProps> = ({ adapter, dispatcher 
                 className="gh-queue-input"
                 value={inputValue}
                 onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                placeholder={isGenerating ? t("queuePlaceholderBusy") : t("queuePlaceholderIdle")}
+                placeholder={
+                  isGenerating
+                    ? `AI 生成中，${submitKeyDisplay} 加入队列...`
+                    : `输入提示词，${submitKeyDisplay} 直接发送...`
+                }
                 rows={1}
               />
               <button
                 className="gh-queue-send-btn"
                 onClick={handleSubmit}
                 disabled={!inputValue.trim()}
-                title="Enter">
+                title={submitKeyDisplay}>
                 <svg
                   viewBox="0 0 24 24"
                   width="16"

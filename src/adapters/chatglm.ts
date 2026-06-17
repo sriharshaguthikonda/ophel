@@ -1429,8 +1429,8 @@ export class ChatGLMAdapter extends SiteAdapter {
 
   isGenerating(): boolean {
     const selectors = [
+      ".enter.searching .enter-icon-container", // 输入区域的停止按钮容器
       ".stop-generate",
-      ".stop-answer-default",
       ".stop-stream-tip",
       ".answer-content-wrap .generating-icon",
       ".enter-icon-container.stop",
@@ -1448,12 +1448,12 @@ export class ChatGLMAdapter extends SiteAdapter {
 
   getStopButtonSelectors(): string[] {
     return [
+      ".enter.searching .enter-icon-container", // 输入区域的停止按钮容器（优先）
       ".stop-generate",
-      ".stop-answer-default",
       ".stop-stream-tip",
       ".answer-content-wrap .generating-icon",
       ".enter-icon-container.stop",
-      ".enter.searching",
+      ".enter.searching", // 兜底：外层 div
       ".enter.is-main-chat.searching",
     ]
   }
