@@ -20,14 +20,10 @@ interface PromptChainsState {
 }
 
 const normalizeChain = (chain: PromptChain): PromptChain => {
-  const showInSelectionPopover =
-    chain.enabled === false ? false : chain.showInSelectionPopover !== false
-
   return {
     ...chain,
     iconSvg: chain.iconSvg ? sanitizeSvgIcon(chain.iconSvg) : "",
-    enabled: true,
-    showInSelectionPopover,
+    showInSelectionPopover: chain.showInSelectionPopover !== false,
     steps: Array.isArray(chain.steps) ? chain.steps : [],
     createdAt: chain.createdAt || Date.now(),
     updatedAt: chain.updatedAt || Date.now(),
