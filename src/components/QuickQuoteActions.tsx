@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import type { QuickQuoteSupportMode, SiteAdapter } from "~adapters/base"
-import { MoreHorizontalIcon } from "~components/icons"
-import { QuoteIcon, ReplyIcon } from "~components/icons/QuoteIcon"
+import { CheckIcon, CopyIcon, MoreHorizontalIcon } from "~components/icons"
+import { QuoteIcon } from "~components/icons/QuoteIcon"
 import { SafeSvgMarkup } from "~components/ui"
 import { VariableInputDialog } from "~components/VariableInputDialog"
+import { QUICK_QUOTE_REPLY_CHAIN_ID } from "~constants"
 import {
   buildPromptChainQueueInputs,
   buildPromptChainAutoValues,
   extractPromptChainVariables,
   resolvePromptChainSteps,
+  type ResolvedPromptChainStep,
   type PromptChainSelectionContext,
 } from "~core/prompt-chain-runner"
 import type { PromptChain, PromptQuoteReference } from "~core/prompt-action-types"
@@ -32,7 +34,7 @@ import {
   isEditableKeyboardTarget,
 } from "~utils/dom-toolkit"
 import { t } from "~utils/i18n"
-import { formatMarkdownQuote, replaceVariables, type ParsedVariable } from "~utils/prompt-variables"
+import { formatMarkdownQuote, type ParsedVariable } from "~utils/prompt-variables"
 import { showToast } from "~utils/toast"
 
 interface QuickQuoteActionsProps {
@@ -240,6 +242,36 @@ const createQuickQuoteMessageScopeKey = (index: number, text: string): string =>
   return `${index}:${normalized.length}:${normalized.slice(0, 120)}:${normalized.slice(-120)}`
 }
 
+const isDefaultQuickQuoteReplyChain = (chain: PromptChain): boolean =>
+  chain.id === QUICK_QUOTE_REPLY_CHAIN_ID
+
+const canRunChainWithoutPromptQueue = (chain: PromptChain): boolean =>
+  chain.steps.length > 0 && chain.steps.every((step) => step.runMode === "insert")
+
+const buildDirectInsertChainContent = (resolvedSteps: ResolvedPromptChainStep[]): string => {
+  let hasFullQuoteMarker = false
+
+  return resolvedSteps
+    .map((resolvedStep) => {
+      const quoteMarkerKind = resolvedStep.quoteRef
+        ? hasFullQuoteMarker
+          ? "ref"
+          : "full"
+        : undefined
+
+      if (quoteMarkerKind === "full") {
+        hasFullQuoteMarker = true
+      }
+
+      return appendQuickQuoteMarker(
+        resolvedStep.content,
+        resolvedStep.quoteRef,
+        quoteMarkerKind ? { kind: quoteMarkerKind } : undefined,
+      )
+    })
+    .join("\n\n")
+}
+
 const getQuickQuoteChipRow = (message: HTMLElement, host: HTMLElement): HTMLElement => {
   const existing = message.querySelector(QUICK_QUOTE_CHIP_ROW_SELECTOR)
   const row = existing instanceof HTMLElement ? existing : document.createElement("span")
@@ -275,12 +307,6 @@ const ChainLetterFallback: React.FC<{ title: string }> = ({ title }) => {
     </span>
   )
 }
-
-const getReplyContent = (text: string) =>
-  replaceVariables(t("quickQuoteReplyTemplate"), {
-    selection: text,
-    quote: formatMarkdownQuote(text),
-  }).trim() + "\n\n"
 
 const injectQuickQuoteHostStyles = (root: Document | ShadowRoot) => {
   if (root.querySelector(`#${QUICK_QUOTE_STYLE_ID}`)) return
@@ -634,7 +660,9 @@ export const QuickQuoteActions: React.FC<QuickQuoteActionsProps> = ({ adapter, p
   const [pendingQueueGateRun, setPendingQueueGateRun] = useState<PendingQueueGateRun | null>(null)
   const [chainMenuOpen, setChainMenuOpen] = useState(false)
   const [queueGateVisible, setQueueGateVisible] = useState(false)
+  const [copySucceeded, setCopySucceeded] = useState(false)
   const isMouseSelectingRef = useRef(false)
+  const copyFeedbackTimerRef = useRef<number | null>(null)
 
   const visibleChains = useMemo(
     () =>
@@ -650,6 +678,7 @@ export const QuickQuoteActions: React.FC<QuickQuoteActionsProps> = ({ adapter, p
   )
   const primaryChains = visibleChains.slice(0, QUICK_QUOTE_PRIMARY_CHAIN_LIMIT)
   const overflowChains = visibleChains.slice(QUICK_QUOTE_PRIMARY_CHAIN_LIMIT)
+  const hasUserVisibleChains = visibleChains.some((chain) => !isDefaultQuickQuoteReplyChain(chain))
   const quickQuoteSupportMode = useMemo(() => adapter.getQuickQuoteSupportMode(), [adapter])
   const quickQuoteEnabled = useMemo(
     () => canUseOphelQuickQuote(quickQuoteEnabledSetting, quickQuoteSupportMode),
@@ -660,9 +689,9 @@ export const QuickQuoteActions: React.FC<QuickQuoteActionsProps> = ({ adapter, p
       canUseQuickQuoteSelectionActions(
         quickQuoteEnabledSetting,
         quickQuoteSupportMode,
-        visibleChains.length > 0,
+        hasUserVisibleChains,
       ),
-    [quickQuoteEnabledSetting, quickQuoteSupportMode, visibleChains.length],
+    [hasUserVisibleChains, quickQuoteEnabledSetting, quickQuoteSupportMode],
   )
 
   const clearSelection = useCallback(() => {
@@ -725,6 +754,23 @@ export const QuickQuoteActions: React.FC<QuickQuoteActionsProps> = ({ adapter, p
       setChainMenuOpen(false)
     }
   }, [overflowChains.length, selectionState])
+
+  useEffect(() => {
+    setCopySucceeded(false)
+    if (copyFeedbackTimerRef.current !== null) {
+      window.clearTimeout(copyFeedbackTimerRef.current)
+      copyFeedbackTimerRef.current = null
+    }
+  }, [selectionState?.text])
+
+  useEffect(
+    () => () => {
+      if (copyFeedbackTimerRef.current !== null) {
+        window.clearTimeout(copyFeedbackTimerRef.current)
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     if (!selectionState) {
@@ -811,27 +857,30 @@ export const QuickQuoteActions: React.FC<QuickQuoteActionsProps> = ({ adapter, p
     )
   }, [])
 
+  const handleCopy = useCallback(async () => {
+    if (!selectionState) return
+
+    try {
+      await navigator.clipboard.writeText(selectionState.text)
+      setCopySucceeded(true)
+      showToast(t("copySuccess"), 1500)
+      if (copyFeedbackTimerRef.current !== null) {
+        window.clearTimeout(copyFeedbackTimerRef.current)
+      }
+      copyFeedbackTimerRef.current = window.setTimeout(() => {
+        setCopySucceeded(false)
+        copyFeedbackTimerRef.current = null
+      }, 1500)
+    } catch (error) {
+      console.error("[QuickQuote] Copy failed:", error)
+      showToast(t("copyFailed"), 1800)
+    }
+  }, [selectionState])
+
   const handleQuote = useCallback(async () => {
     if (!selectionState) return
 
     const content = formatMarkdownQuote(selectionState.text) + "\n\n"
-    const selection = createSelectionContext()
-    rememberQuickQuoteReferenceForContent(content, selection?.quoteRef)
-    const contentWithMarker = appendQuickQuoteMarker(content, selection?.quoteRef)
-    const inserted = await promptManager.insertPrompt(contentWithMarker)
-    if (!inserted) {
-      showToast(t("insertFailed"))
-      return
-    }
-
-    showToast(t("quickQuoteInserted"), 1800)
-    clearSelection()
-  }, [clearSelection, createSelectionContext, promptManager, selectionState])
-
-  const handleInsertBuiltIn = useCallback(async () => {
-    if (!selectionState) return
-
-    const content = getReplyContent(selectionState.text)
     const selection = createSelectionContext()
     rememberQuickQuoteReferenceForContent(content, selection?.quoteRef)
     const contentWithMarker = appendQuickQuoteMarker(content, selection?.quoteRef)
@@ -857,6 +906,29 @@ export const QuickQuoteActions: React.FC<QuickQuoteActionsProps> = ({ adapter, p
         return
       }
 
+      const isInsertOnly = resolvedSteps.every(
+        (resolvedStep) => resolvedStep.step.runMode === "insert",
+      )
+      if (isInsertOnly) {
+        const visibleContent = resolvedSteps
+          .map((resolvedStep) => resolvedStep.content)
+          .join("\n\n")
+        const quoteRef = resolvedSteps.find((resolvedStep) => resolvedStep.quoteRef)?.quoteRef
+        rememberQuickQuoteReferenceForContent(visibleContent, quoteRef)
+        const inserted = await promptManager.insertPrompt(
+          buildDirectInsertChainContent(resolvedSteps),
+        )
+        if (!inserted) {
+          showToast(t("insertFailed"))
+          return
+        }
+
+        updateChainLastUsed(chain.id)
+        showToast(t("quickQuoteInserted"), 1800)
+        clearSelection()
+        return
+      }
+
       const isPromptQueueEnabled =
         useSettingsStore.getState().settings.features?.prompts?.promptQueue ?? false
       if (!isPromptQueueEnabled) {
@@ -871,7 +943,7 @@ export const QuickQuoteActions: React.FC<QuickQuoteActionsProps> = ({ adapter, p
       showToast(t("quickQuoteChainQueued", { count: String(items.length) }), 2500)
       clearSelection()
     },
-    [clearSelection, enqueueMany, prompts, updateChainLastUsed],
+    [clearSelection, enqueueMany, promptManager, prompts, updateChainLastUsed],
   )
 
   const prepareChainRun = useCallback(
@@ -908,7 +980,7 @@ export const QuickQuoteActions: React.FC<QuickQuoteActionsProps> = ({ adapter, p
       const selection = createSelectionContext()
       if (!selection) return
 
-      if (!promptQueueEnabled) {
+      if (!promptQueueEnabled && !canRunChainWithoutPromptQueue(chain)) {
         setPendingChainRun(null)
         setPendingQueueGateRun({ chain, selection })
         setQueueGateVisible(true)
@@ -982,18 +1054,20 @@ export const QuickQuoteActions: React.FC<QuickQuoteActionsProps> = ({ adapter, p
           {quickQuoteEnabled && (
             <>
               <button
+                className={`gh-quick-quote-action gh-quick-quote-copy-action${
+                  copySucceeded ? " active" : ""
+                }`}
+                title={copySucceeded ? t("copySuccess") : t("copy")}
+                aria-label={copySucceeded ? t("copySuccess") : t("copy")}
+                onClick={() => void handleCopy()}>
+                {copySucceeded ? <CheckIcon size={15} /> : <CopyIcon size={15} />}
+              </button>
+              <button
                 className="gh-quick-quote-action"
                 title={t("quickQuoteQuote")}
                 onClick={() => void handleQuote()}>
                 <QuoteIcon size={15} />
                 <span>{t("quickQuoteQuote")}</span>
-              </button>
-              <button
-                className="gh-quick-quote-action"
-                title={t("quickQuoteReply")}
-                onClick={() => void handleInsertBuiltIn()}>
-                <ReplyIcon size={15} />
-                <span>{t("quickQuoteReply")}</span>
               </button>
             </>
           )}

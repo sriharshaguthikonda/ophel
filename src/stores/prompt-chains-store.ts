@@ -2,12 +2,14 @@ import { create } from "zustand"
 import { createJSONStorage, persist } from "zustand/middleware"
 
 import type { PromptChain } from "~core/prompt-action-types"
+import { DEFAULT_PROMPT_CHAINS_VERSION, getDefaultPromptChains } from "~constants"
 import { sanitizeSvgIcon } from "~utils/svg-sanitizer"
 
 import { chromeStorageAdapter } from "./chrome-adapter"
 
 interface PromptChainsState {
   chains: PromptChain[]
+  defaultChainsVersion: number
   _hasHydrated: boolean
   addChain: (data: Omit<PromptChain, "id" | "createdAt" | "updatedAt">) => PromptChain
   updateChain: (id: string, data: Partial<Omit<PromptChain, "id" | "createdAt">>) => void
@@ -30,6 +32,18 @@ const normalizeChain = (chain: PromptChain): PromptChain => {
   }
 }
 
+const mergeDefaultChains = (chains: PromptChain[], refreshDefaults = false): PromptChain[] => {
+  const defaultChains = getDefaultPromptChains().map(normalizeChain)
+  const defaultIds = new Set(defaultChains.map((chain) => chain.id))
+  const preservedChains = refreshDefaults
+    ? chains.filter((chain) => !defaultIds.has(chain.id))
+    : chains
+  const existingIds = new Set(preservedChains.map((chain) => chain.id))
+  const chainsToInstall = defaultChains.filter((chain) => !existingIds.has(chain.id))
+
+  return [...chainsToInstall, ...preservedChains]
+}
+
 let _completeHydration: (() => void) | null = null
 
 export const usePromptChainsStore = create<PromptChainsState>()(
@@ -37,7 +51,8 @@ export const usePromptChainsStore = create<PromptChainsState>()(
     (set, get) => (
       (_completeHydration = () => set({ _hasHydrated: true })),
       {
-        chains: [],
+        chains: getDefaultPromptChains().map(normalizeChain),
+        defaultChainsVersion: DEFAULT_PROMPT_CHAINS_VERSION,
         _hasHydrated: false,
 
         addChain: (data) => {
@@ -113,12 +128,25 @@ export const usePromptChainsStore = create<PromptChainsState>()(
     {
       name: "promptChains",
       storage: createJSONStorage(() => chromeStorageAdapter),
-      partialize: (state) => ({ chains: state.chains }),
+      partialize: (state) => ({
+        chains: state.chains,
+        defaultChainsVersion: state.defaultChainsVersion,
+      }),
       merge: (persistedState, currentState) => {
-        const persistedChains = (persistedState as { chains?: PromptChain[] } | undefined)?.chains
+        const persisted = persistedState as
+          | { chains?: PromptChain[]; defaultChainsVersion?: number }
+          | undefined
+        const persistedChains = persisted?.chains
+        const chains = Array.isArray(persistedChains)
+          ? persistedChains.map(normalizeChain)
+          : currentState.chains
+        const shouldInstallDefaults =
+          !persisted || persisted.defaultChainsVersion !== DEFAULT_PROMPT_CHAINS_VERSION
+
         return {
           ...currentState,
-          chains: Array.isArray(persistedChains) ? persistedChains.map(normalizeChain) : [],
+          chains: shouldInstallDefaults ? mergeDefaultChains(chains, true) : chains,
+          defaultChainsVersion: DEFAULT_PROMPT_CHAINS_VERSION,
         }
       },
       onRehydrateStorage: () => () => {
