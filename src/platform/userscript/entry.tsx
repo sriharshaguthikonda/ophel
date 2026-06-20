@@ -181,6 +181,7 @@ if (typeof chrome === "undefined" || !chrome.storage) {
     "readingHistory",
     "claudeSessionKeys",
     "conversations",
+    "ophel:releaseNotesState",
   ]
 
   ;(window as any).chrome = {
