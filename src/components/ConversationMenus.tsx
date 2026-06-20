@@ -1,7 +1,14 @@
 import React, { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 
-import { ExportIcon, JSONFileIcon, LinkIcon, MarkdownIcon, TXTFileIcon } from "~components/icons"
+import {
+  ExportIcon,
+  JSONFileIcon,
+  LinkIcon,
+  MarkdownIcon,
+  SegmentedExportIcon,
+  TXTFileIcon,
+} from "~components/icons"
 import { DeleteIcon } from "~components/icons/DeleteIcon"
 import { FolderMoveIcon } from "~components/icons/FolderMoveIcon"
 import { PinIcon } from "~components/icons/PinIcon"
@@ -406,6 +413,7 @@ interface ExportMenuProps {
   onExportMarkdown: () => void
   onExportJSON: () => void
   onExportTXT: () => void
+  onSegmentedExport?: () => void
 }
 
 export const ExportMenu: React.FC<ExportMenuProps> = ({
@@ -415,6 +423,7 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
   onExportMarkdown,
   onExportJSON,
   onExportTXT,
+  onSegmentedExport,
 }) => {
   return (
     <ContextMenu anchorEl={anchorEl} anchorPoint={anchorPoint} onClose={onClose}>
@@ -448,6 +457,27 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
           <span>{t("exportToTXT")}</span>
         </div>
       </MenuButton>
+      {onSegmentedExport && (
+        <>
+          <div
+            style={{
+              height: "1px",
+              background: "var(--gh-border, #e5e7eb)",
+              margin: "3px 4px",
+            }}
+          />
+          <MenuButton
+            onClick={() => {
+              onClose()
+              onSegmentedExport()
+            }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <SegmentedExportIcon size={14} />
+              <span>{t("segmentedExportMenuItem")}</span>
+            </div>
+          </MenuButton>
+        </>
+      )}
     </ContextMenu>
   )
 }
