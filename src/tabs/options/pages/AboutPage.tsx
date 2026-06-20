@@ -18,6 +18,7 @@ import {
   ShieldCheckIcon,
   StarIcon,
 } from "~components/icons"
+import { SparkleIcon } from "~components/icons/SparkleIcon"
 import { SUPPORTED_AI_PLATFORMS } from "~constants/defaults"
 import { SITE_ICONS } from "~constants/site-icons"
 import { APP_DISPLAY_NAME, APP_ICON_URL, APP_VERSION } from "~utils/config"
@@ -25,7 +26,11 @@ import { t } from "~utils/i18n"
 
 import { PageTitle } from "../components"
 
-const AboutPage: React.FC = () => {
+interface AboutPageProps {
+  onOpenReleaseNotes?: () => void
+}
+
+const AboutPage: React.FC<AboutPageProps> = ({ onOpenReleaseNotes }) => {
   const supportedPlatformsCount = String(SUPPORTED_AI_PLATFORMS.length)
   return (
     <div>
@@ -55,9 +60,20 @@ const AboutPage: React.FC = () => {
           }}
         />
         <div className="about-hero-content">
-          <div className="about-hero-title">
-            {APP_DISPLAY_NAME}
-            <span className="about-hero-version">v{APP_VERSION}</span>
+          <div className="about-hero-heading">
+            <div className="about-hero-title">
+              {APP_DISPLAY_NAME}
+              <span className="about-hero-version">v{APP_VERSION}</span>
+            </div>
+            {onOpenReleaseNotes ? (
+              <button
+                type="button"
+                className="about-release-notes-btn"
+                onClick={onOpenReleaseNotes}>
+                <SparkleIcon size={14} color="currentColor" />
+                <span>{t("releaseNotesOpen")}</span>
+              </button>
+            ) : null}
           </div>
           <div className="about-hero-desc">
             {t("aboutDescription", { appName: APP_DISPLAY_NAME })}
