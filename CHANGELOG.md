@@ -9,6 +9,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [1.1.0] - 2026-06-22
+
 ### 🚀 New Features
 
 - **Quick Quote Chains** — Prompt chains can now be triggered directly from quick quote actions, with chain icon picker, drag-to-reorder, and embedded quote anchors for reliable reference restoration across page refreshes.
@@ -1204,6 +1208,7 @@ This is the first official release of Ophel, providing comprehensive enhancement
 
 ---
 
+[1.1.0]: https://github.com/urzeye/ophel/releases/tag/v1.1.0
 [1.0.60]: https://github.com/urzeye/ophel/releases/tag/v1.0.60
 [1.0.59]: https://github.com/urzeye/ophel/releases/tag/v1.0.59
 [1.0.58]: https://github.com/urzeye/ophel/releases/tag/v1.0.58

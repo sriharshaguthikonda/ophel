@@ -8,6 +8,10 @@
 
 ## [Unreleased]
 
+---
+
+## [1.1.0] - 2026-06-22
+
 ### 🚀 新增功能
 
 - **快捷引用链（Quick Quote Chains）** — 提示词链现在可直接从快捷引用操作触发，支持链图标选择器、拖拽排序和内嵌引用锚点，确保页面刷新后可靠恢复引用定位。
@@ -1204,6 +1208,7 @@
 
 ---
 
+[1.1.0]: https://github.com/urzeye/ophel/releases/tag/v1.1.0
 [1.0.60]: https://github.com/urzeye/ophel/releases/tag/v1.0.60
 [1.0.59]: https://github.com/urzeye/ophel/releases/tag/v1.0.59
 [1.0.58]: https://github.com/urzeye/ophel/releases/tag/v1.0.58
