@@ -17,6 +17,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### 🐛 Bug Fixes
 
+- **Prompt send shortcuts** — Fixed issue where sending from the chat input with Ophel's configured shortcut could lag on Claude, DeepSeek, and similar sites. Double-click prompt sending also now respects Ctrl+Enter send mode without leaving the prompt in the input box or adding a newline. (#701, #710)
 - **Codex task page outline** — Codex Cloud task share pages on ChatGPT now include the original prompt and response headings in the Outline instead of showing an empty outline. (#709)
 - **Gemini shared chat continuation** — Fixed issue where Purify Mode could hide Gemini's "Continue this chat" button on shared chat pages. (#703)
 - **Outline scroll highlight stability** — Fixed issue where source scrolling could highlight a user question, previous answer, or hidden child instead of the current visible heading in long conversations. (#704, #708)
