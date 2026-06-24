@@ -387,6 +387,10 @@ export class PromptManager {
     return true
   }
 
+  private dispatchNativeSubmitByKeyboard(editor: HTMLElement): boolean {
+    return this.dispatchSubmitByKeyboard(editor)
+  }
+
   submitCurrentInputImmediately(submitShortcut?: "enter" | "ctrlEnter"): boolean {
     this.syncAiStudioSubmitShortcut(submitShortcut ?? "enter")
 
@@ -404,10 +408,7 @@ export class PromptManager {
       .trim()
     if (!editor || !currentContent) return false
 
-    return this.dispatchSubmitByKeyboard(
-      editor,
-      submitShortcut === "ctrlEnter" ? "enter" : submitShortcut,
-    )
+    return this.dispatchNativeSubmitByKeyboard(editor)
   }
 
   private shouldRetryWithKeyboard(initialContent: string): boolean {
@@ -482,7 +483,7 @@ export class PromptManager {
         editor || this.adapter.getTextareaElement() || this.adapter.findTextarea()
       if (!activeEditor) return false
 
-      triggered = this.dispatchSubmitByKeyboard(activeEditor, submitShortcut)
+      triggered = this.dispatchNativeSubmitByKeyboard(activeEditor)
     }
 
     if (!triggered) return false
@@ -506,7 +507,7 @@ export class PromptManager {
       return false
     }
 
-    const keyboardTriggered = this.dispatchSubmitByKeyboard(retryEditor, submitShortcut)
+    const keyboardTriggered = this.dispatchNativeSubmitByKeyboard(retryEditor)
     if (!keyboardTriggered) {
       return false
     }
