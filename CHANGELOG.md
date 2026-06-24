@@ -18,6 +18,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### 🐛 Bug Fixes
 
+- **ChatGPT pinned conversations** — Fixed ChatGPT conversation sync for the new sidebar layout, so pinned conversations under the Pinned section are imported, title updates are tracked, and project folders are not treated as chats.
 - **Prompt send shortcuts** — Fixed issue where sending from the chat input with Ophel's configured shortcut could lag on Claude, DeepSeek, and similar sites. Double-click prompt sending also now respects Ctrl+Enter send mode without leaving the prompt in the input box or adding a newline. (#701, #710)
 - **Gemini conversation sync** — Fixed issue where first-time or empty-library Gemini auto sync could stop after only part of the history, leave the Conversations panel counts empty, or make manual sync wait longer than needed after reaching the bottom. (#712)
 - **Codex task page outline** — Codex Cloud task share pages on ChatGPT now include the original prompt and response headings in the Outline instead of showing an empty outline. (#709)
