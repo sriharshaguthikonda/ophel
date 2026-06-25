@@ -238,8 +238,8 @@
       <sub><b>Lewu Gao</b></sub>
     </td>
     <td align="center" valign="top" width="14.28%">
-      <img src="https://pic1.afdiancdn.com/default/avatar/avatar-orange.png?imageView2/1/w/120/h/120" width="84px;" alt="爱发电用户_AYsw" /><br />
-      <sub><b>爱发电用户_AYsw</b></sub>
+      <img src="https://pic1.afdiancdn.com/default/avatar/avatar-orange.png?imageView2/1/w/120/h/120" width="84px;" alt="Will" /><br />
+      <sub><b>Will</b></sub>
     </td>
     <td align="center" valign="top" width="14.28%">
       <img src="https://lh3.googleusercontent.com/a-/ALV-UjUqWp1juNONMkqERRF-T1qsyf-bvPFWcqrBehBTtNkoDQ8axvA=s48-w48-h48" width="84px;" alt="Steel Maestro" /><br />
