@@ -22,7 +22,7 @@ export const getStoreInfo = (): StoreInfo => {
   // 1. Check if running as Userscript
   if (typeof __PLATFORM__ !== "undefined" && __PLATFORM__ === "userscript") {
     return {
-      url: "https://greasyfork.org/zh-CN/scripts/563646-ophel-ai-chat-page-enhancer",
+      url: "https://greasyfork.org/scripts/563646-ophel-ai-chat-page-enhancer",
       icon: <GreasyForkIcon size={14} />,
       label: t("reviewBtn"),
     }
@@ -32,7 +32,7 @@ export const getStoreInfo = (): StoreInfo => {
   const userAgent = navigator.userAgent.toLowerCase()
   if (userAgent.indexOf("firefox") > -1) {
     return {
-      url: "https://addons.mozilla.org/zh-CN/firefox/addon/ophel-ai-chat-enhancer/",
+      url: "https://addons.mozilla.org/firefox/addon/ophel-ai-chat-enhancer/",
       icon: <FirefoxIcon size={14} />,
       label: t("reviewBtn"),
     }
@@ -46,7 +46,7 @@ export const getStoreInfo = (): StoreInfo => {
   } else {
     // Default to Chrome (includes Brave etc)
     return {
-      url: "https://chromewebstore.google.com/detail/ophel-ai-%E5%AF%B9%E8%AF%9D%E5%A2%9E%E5%BC%BA%E5%B7%A5%E5%85%B7/lpcohdfbomkgepfladogodgeoppclakd",
+      url: "https://chromewebstore.google.com/detail/ai-chat-organizer-outline/lpcohdfbomkgepfladogodgeoppclakd",
       icon: <ChromeIcon size={14} />,
       label: t("reviewBtn"),
     }

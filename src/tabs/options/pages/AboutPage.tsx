@@ -87,7 +87,7 @@ const AboutPage: React.FC<AboutPageProps> = ({ onOpenReleaseNotes }) => {
         style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
         {/* Chrome Store */}
         <a
-          href="https://chromewebstore.google.com/detail/ophel-ai-%E5%AF%B9%E8%AF%9D%E5%A2%9E%E5%BC%BA%E5%B7%A5%E5%85%B7/lpcohdfbomkgepfladogodgeoppclakd"
+          href="https://chromewebstore.google.com/detail/ai-chat-organizer-outline/lpcohdfbomkgepfladogodgeoppclakd"
           target="_blank"
           rel="noopener noreferrer"
           className="about-link-card"
@@ -115,7 +115,7 @@ const AboutPage: React.FC<AboutPageProps> = ({ onOpenReleaseNotes }) => {
 
         {/* Firefox Add-on */}
         <a
-          href="https://addons.mozilla.org/zh-CN/firefox/addon/ophel-ai-chat-enhancer/"
+          href="https://addons.mozilla.org/firefox/addon/ophel-ai-chat-enhancer/"
           target="_blank"
           rel="noopener noreferrer"
           className="about-link-card"
@@ -129,7 +129,7 @@ const AboutPage: React.FC<AboutPageProps> = ({ onOpenReleaseNotes }) => {
 
         {/* GreasyFork */}
         <a
-          href="https://greasyfork.org/zh-CN/scripts/563646-ophel-ai-chat-page-enhancer"
+          href="https://greasyfork.org/scripts/563646-ophel-ai-chat-page-enhancer"
           target="_blank"
           rel="noopener noreferrer"
           className="about-link-card"
