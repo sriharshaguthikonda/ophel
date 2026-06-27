@@ -122,6 +122,8 @@ const CHATGPT_MODEL_MENU_SELECTOR =
 const CHATGPT_MODEL_MENU_ITEM_SELECTOR = `${CHATGPT_MODEL_MENU_SELECTOR} [data-testid^="model-switcher-"]`
 const CHATGPT_SPONSORED_AD_SELECTOR =
   'div.border-token-border-default.border-t.py-4.text-sm:has(button[aria-label="Ad options"]):has([role="link"][tabindex="0"])'
+const CHATGPT_CONVERSATION_LINK_SELECTOR = 'a[data-sidebar-item="true"][href^="/c/"]'
+const CHATGPT_CONVERSATION_ID_RE = /^\/c\/([a-z0-9-]+)(?:[/?#]|$)/i
 
 // ==================== 导出快照 ====================
 // ChatGPT 长会话采用虚拟滚动：滚出视口的消息内容会被卸载，
@@ -309,36 +311,70 @@ export class ChatGPTAdapter extends SiteAdapter {
 
   // ==================== 会话管理 ====================
 
+  private getChatGPTConversationLinks(): HTMLAnchorElement[] {
+    return Array.from(document.querySelectorAll(CHATGPT_CONVERSATION_LINK_SELECTOR)).filter(
+      (el): el is HTMLAnchorElement =>
+        el.tagName.toLowerCase() === "a" && Boolean(this.getChatGPTConversationId(el)),
+    )
+  }
+
+  private getChatGPTConversationId(el: Element): string | null {
+    const href = el.getAttribute("href") || ""
+    return href.match(CHATGPT_CONVERSATION_ID_RE)?.[1] || null
+  }
+
+  private getChatGPTConversationTitleElement(el: Element): Element | null {
+    return (
+      el.querySelector(".truncate [dir='auto']") ||
+      el.querySelector(".truncate span") ||
+      el.querySelector(".truncate") ||
+      el.querySelector("span")
+    )
+  }
+
+  private extractConversationInfoFromLink(el: Element, cid?: string): ConversationInfo | null {
+    const id = this.getChatGPTConversationId(el)
+    if (!id) return null
+
+    const titleEl = this.getChatGPTConversationTitleElement(el)
+    const title = titleEl?.textContent?.trim() || ""
+    const isActive = el.hasAttribute("data-active")
+
+    return {
+      id,
+      cid,
+      title,
+      url: `https://chatgpt.com/c/${id}`,
+      isActive,
+      isPinned: this.isChatGPTConversationPinned(el),
+    }
+  }
+
+  private isChatGPTConversationPinned(el: Element): boolean {
+    const history = document.querySelector("#history")
+    if (history && !history.contains(el)) {
+      return true
+    }
+
+    // 旧版 ChatGPT：置顶项仍在 #history 内，但 trailing 区域会多一个置顶图标。
+    const trailingPair = el.querySelector(".trailing-pair")
+    const trailingIcons = trailingPair?.querySelectorAll(".trailing svg") || []
+    return trailingIcons.length > 1
+  }
+
   getConversationList(): ConversationInfo[] {
-    // 侧边栏会话列表：#history 内的 a[data-sidebar-item]
-    const items = document.querySelectorAll('#history a[data-sidebar-item="true"]') || []
     const cid = this.getCurrentCid() || undefined
+    const seenIds = new Set<string>()
+    const conversations: ConversationInfo[] = []
 
-    return Array.from(items)
-      .map((el) => {
-        const href = el.getAttribute("href") || ""
-        // href 格式: /c/695df822-1e68-8331-9efb-bf1cc0e8820d
-        const idMatch = href.match(/\/c\/([a-f0-9-]+)/)
-        const id = idMatch ? idMatch[1] : ""
-        const titleEl = el.querySelector("span")
-        const title = titleEl?.textContent?.trim() || ""
-        const isActive = el.hasAttribute("data-active")
+    this.getChatGPTConversationLinks().forEach((el) => {
+      const info = this.extractConversationInfoFromLink(el, cid)
+      if (!info || seenIds.has(info.id)) return
+      seenIds.add(info.id)
+      conversations.push(info)
+    })
 
-        // 检测置顶：置顶的会话在 trailing 区域有额外的图标
-        const trailingPair = el.querySelector(".trailing-pair")
-        const trailingIcons = trailingPair?.querySelectorAll(".trailing svg") || []
-        const isPinned = trailingIcons.length > 1 // 置顶会话有多个图标
-
-        return {
-          id,
-          cid,
-          title,
-          url: id ? `https://chatgpt.com/c/${id}` : "",
-          isActive,
-          isPinned,
-        }
-      })
-      .filter((c) => c.id)
+    return conversations
   }
 
   getSidebarScrollContainer(): Element | null {
@@ -348,44 +384,27 @@ export class ChatGPTAdapter extends SiteAdapter {
       const nav = history.closest("nav")
       if (nav) return nav
     }
+    const conversationLink = this.getChatGPTConversationLinks()[0]
+    const nav = conversationLink?.closest("nav")
+    if (nav) return nav
     return null
   }
 
   getConversationObserverConfig(): ConversationObserverConfig {
     return {
-      selector: '#history a[data-sidebar-item="true"]',
+      selector: CHATGPT_CONVERSATION_LINK_SELECTOR,
       shadow: false,
       extractInfo: (el) => {
-        const href = el.getAttribute("href") || ""
-        const idMatch = href.match(/\/c\/([a-f0-9-]+)/)
-        const id = idMatch ? idMatch[1] : ""
-        if (!id) return null
-        const titleEl = el.querySelector("span")
-        const title = titleEl?.textContent?.trim() || ""
-        const isActive = el.hasAttribute("data-active")
         const cid = this.getCurrentCid() || undefined
-        // 检测置顶
-        const trailingPair = el.querySelector(".trailing-pair")
-        const trailingIcons = trailingPair?.querySelectorAll(".trailing svg") || []
-        const isPinned = trailingIcons.length > 1
-        return {
-          id,
-          cid,
-          title,
-          url: `https://chatgpt.com/c/${id}`,
-          isActive,
-          isPinned,
-        }
+        return this.extractConversationInfoFromLink(el, cid)
       },
-      getTitleElement: (el) => el.querySelector("span") || el,
+      getTitleElement: (el) => this.getChatGPTConversationTitleElement(el) || el,
     }
   }
 
   navigateToConversation(id: string, url?: string): boolean {
     // 通过 href 属性查找侧边栏链接
-    const sidebarLink = document.querySelector(
-      `#history a[href="/c/${id}"], a[data-sidebar-item][href="/c/${id}"]`,
-    ) as HTMLElement | null
+    const sidebarLink = this.findConversationRow(id)
 
     if (sidebarLink) {
       sidebarLink.click()
@@ -722,9 +741,11 @@ export class ChatGPTAdapter extends SiteAdapter {
   }
 
   private findConversationRow(id: string): HTMLElement | null {
-    return document.querySelector(
-      `#history a[data-sidebar-item="true"][href="/c/${id}"]`,
-    ) as HTMLElement | null
+    const targetHref = `/c/${id}`
+    return (
+      this.getChatGPTConversationLinks().find((link) => link.getAttribute("href") === targetHref) ||
+      null
+    )
   }
 
   private async findConversationMenuButton(
@@ -955,8 +976,12 @@ export class ChatGPTAdapter extends SiteAdapter {
 
   getConversationTitle(): string | null {
     // 从侧边栏获取当前选中项
-    const selected = document.querySelector("#history a[data-active] span")
-    const title = selected?.textContent?.trim()
+    const selected = this.getChatGPTConversationLinks().find((link) =>
+      link.hasAttribute("data-active"),
+    )
+    const title = selected
+      ? this.getChatGPTConversationTitleElement(selected)?.textContent?.trim()
+      : null
     if (title) return title
     return this.getSessionName()
   }

@@ -38,7 +38,11 @@ import { useFoldersStore } from "~stores/folders-store"
 import { usePromptsStore } from "~stores/prompts-store"
 import { APP_DISPLAY_NAME, APP_VERSION } from "~utils/config"
 import { DEFAULT_SETTINGS, type Prompt } from "~utils/storage"
-import { EVENT_EXTENSION_UPDATE_AVAILABLE, MSG_CLEAR_ALL_DATA } from "~utils/messaging"
+import {
+  EVENT_EXTENSION_UPDATE_AVAILABLE,
+  EVENT_PAGE_URL_CHANGE,
+  MSG_CLEAR_ALL_DATA,
+} from "~utils/messaging"
 import { showToast } from "~utils/toast"
 import { setLanguage, t } from "~utils/i18n"
 import { getHighlightStyles, renderMarkdown } from "~utils/markdown"
@@ -3264,39 +3268,34 @@ export const App = () => {
 
       if (!editor) return
 
-      const hasPrimaryModifier = e.ctrlKey || e.metaKey
-      const hasAnyModifier = hasPrimaryModifier || e.altKey
+      const hasAnyModifier = e.ctrlKey || e.metaKey || e.altKey
+      const isPlainEnter = !hasAnyModifier && !e.shiftKey
+      const isCtrlEnterSubmitKey = e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
       const isAiStudioMobilePlainEnter =
-        adapter.getSiteId() === SITE_IDS.AISTUDIO &&
-        isLikelyMobileDevice() &&
-        !hasAnyModifier &&
-        !e.shiftKey
+        adapter.getSiteId() === SITE_IDS.AISTUDIO && isLikelyMobileDevice() && isPlainEnter
       if (isAiStudioMobilePlainEnter) return
 
-      const isSubmitKey =
-        promptSubmitShortcut === "ctrlEnter"
-          ? hasPrimaryModifier && !e.altKey && !e.shiftKey
-          : !hasAnyModifier && !e.shiftKey
-      const shouldInsertNewlineInCtrlEnterMode =
-        promptSubmitShortcut === "ctrlEnter" && !hasAnyModifier && !e.shiftKey
+      if (promptSubmitShortcut === "enter") {
+        if (isPlainEnter && selectedPrompt) {
+          window.setTimeout(() => setSelectedPrompt(null), 0)
+        }
+        return
+      }
 
-      if (isSubmitKey) {
+      if (isCtrlEnterSubmitKey) {
         e.preventDefault()
         e.stopPropagation()
         e.stopImmediatePropagation()
 
-        void (async () => {
-          promptManager.syncAiStudioSubmitShortcut(promptSubmitShortcut)
-          const success = await promptManager.submitPrompt(promptSubmitShortcut)
-          if (success) {
-            setSelectedPrompt(null)
-          }
-        })()
+        const submitted = promptManager.submitCurrentInputImmediately(promptSubmitShortcut)
+        if (submitted) {
+          setSelectedPrompt(null)
+        }
         return
       }
 
       // In Ctrl+Enter mode, block plain Enter to avoid accidental native submit
-      if (shouldInsertNewlineInCtrlEnterMode) {
+      if (isPlainEnter) {
         e.preventDefault()
         e.stopPropagation()
         e.stopImmediatePropagation()
@@ -3320,7 +3319,7 @@ export const App = () => {
     return () => {
       document.removeEventListener("keydown", handleKeydown, true)
     }
-  }, [adapter, promptManager, promptSubmitShortcut])
+  }, [adapter, promptManager, promptSubmitShortcut, selectedPrompt])
 
   // Clear selected prompt tag after clicking native send button
   useEffect(() => {
@@ -3361,9 +3360,6 @@ export const App = () => {
   useEffect(() => {
     if (!selectedPrompt || !adapter) return
 
-    // 记录当前 URL
-    let currentUrl = window.location.href
-
     // 清空悬浮条和输入框
     const clearPromptAndTextarea = () => {
       setSelectedPrompt(null)
@@ -3371,29 +3367,10 @@ export const App = () => {
       adapter.clearTextarea()
     }
 
-    // 使用 popstate 监听浏览器前进/后退
-    const handlePopState = () => {
-      if (window.location.href !== currentUrl) {
-        clearPromptAndTextarea()
-      }
-    }
-
-    // 使用定时器检测 URL 变化（SPA 路由）
-    // 因为 pushState/replaceState 不会触发 popstate
-    const checkUrlChange = () => {
-      if (window.location.href !== currentUrl) {
-        currentUrl = window.location.href
-        clearPromptAndTextarea()
-      }
-    }
-
-    // 每 500ms 检查一次 URL 变化
-    const intervalId = setInterval(checkUrlChange, 500)
-    window.addEventListener("popstate", handlePopState)
+    window.addEventListener(EVENT_PAGE_URL_CHANGE, clearPromptAndTextarea)
 
     return () => {
-      clearInterval(intervalId)
-      window.removeEventListener("popstate", handlePopState)
+      window.removeEventListener(EVENT_PAGE_URL_CHANGE, clearPromptAndTextarea)
     }
   }, [selectedPrompt, adapter])
 
